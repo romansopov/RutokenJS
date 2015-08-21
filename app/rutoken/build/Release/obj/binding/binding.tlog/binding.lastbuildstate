@@ -1,2 +1,2 @@
 #TargetFrameworkVersion=v4.0:PlatformToolSet=v120:EnableManagedIncrementalBuild=false:VCToolArchitecture=Native32Bit
-Release|Win32|C:\BAPI\nwjs-v0.12.3-win-ia32\app\rutoken\build\|
+Release|Win32|C:\GitLab\RutokenJS\app\rutoken\build\|

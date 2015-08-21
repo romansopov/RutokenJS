@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{8B958F18-055F-360A-CBF3-F29AB49165F0}</ProjectGuid>
+    <ProjectGuid>{4560425B-2C34-47C2-AFF6-BBA9D8D993E1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>binding</RootNamespace>
   </PropertyGroup>
