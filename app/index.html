@@ -1,0 +1,14 @@
+<html>
+<head>
+<title>Test</title>
+</head>
+<body>
+<script type="text/javascript">
+    var assert = require('assert');
+    var binding = require('./rutoken/build/Release/binding');
+    console.log(binding);
+    assert.equal('world 2', binding.hello());
+    console.log('binding.hello() =', binding.hello());
+</script>
+</body>
+</html>
