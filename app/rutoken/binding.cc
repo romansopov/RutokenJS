@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include <node.h>
 #include <node_buffer.h>
 #include <v8.h>
@@ -9,7 +5,9 @@
 
 using namespace v8;
 
-static void LogCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+HMODULE hModule = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
+
+static void LogCallback(const FunctionCallbackInfo<Value>& args) {
     if (args.Length() < 1) return;
     HandleScope scope(args.GetIsolate());
     Handle<Value> arg = args[0];
@@ -20,7 +18,18 @@ static void LogCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 void Method(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = Isolate::GetCurrent();
   HandleScope scope(isolate);
-  args.GetReturnValue().Set(String::NewFromUtf8(isolate, "world 2"));
+  args.GetReturnValue().Set(String::NewFromUtf8(isolate, "world"));
+}
+
+
+void isModule(const FunctionCallbackInfo<Value>& args) {
+    //Isolate* isolate = Isolate::GetCurrent();
+    //HandleScope scope(isolate);
+    bool ret = false;
+    if(hModule != NULL_PTR) {
+        ret = true;
+    }
+    args.GetReturnValue().Set(ret);
 }
 
 //
@@ -31,7 +40,6 @@ void init(Handle<Object> target) {
     Isolate* isolate = Isolate::GetCurrent();
     HandleScope scope(isolate);
 
-    HMODULE hModule = NULL_PTR;                            // Хэндл загруженной библиотеки PKCS#11
 	CK_SESSION_HANDLE hSession = NULL_PTR;                 // Хэндл открытой сессии
 
 	CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR;         // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
@@ -45,13 +53,17 @@ void init(Handle<Object> target) {
 
     hModule = LoadLibrary(PKCS11_LIBRARY_NAME);
 
+    target->Set(String::NewFromUtf8(isolate, "test"), String::NewFromUtf8(isolate, "Свойство test"));
+
     if(hModule == NULL_PTR) {
         target->Set(String::NewFromUtf8(isolate, "hModule"), String::NewFromUtf8(isolate, "False"));
     } else {
         target->Set(String::NewFromUtf8(isolate, "hModule"), String::NewFromUtf8(isolate, "True"));
     }
 
-    NODE_SET_METHOD(target, "hello", Method);
+    // Регистрация методов
+    NODE_SET_METHOD(target, "hello",    Method);
+    NODE_SET_METHOD(target, "isModule", isModule);
 }
 
 //
