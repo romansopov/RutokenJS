@@ -1,7 +1,7 @@
 # RutokenJS
 NodeJS addons for Rutoken
 
- ## Документации
+ ## Документация
  
  Рутокен: http://developer.rutoken.ru/display/PUB/Public+Home
  
