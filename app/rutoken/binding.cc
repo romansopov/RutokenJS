@@ -6,7 +6,7 @@
 using namespace v8;
 
 HMODULE           hModule  = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
-CK_SESSION_HANDLE hSession = NULL_PTR;                 // Хэндл открытой сессии
+CK_SESSION_HANDLE hSession = NULL_PTR; // Хэндл открытой сессии
 
 CK_FUNCTION_LIST_PTR pFunctionList     = NULL_PTR;         // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 CK_C_GetFunctionList pfGetFunctionList = NULL_PTR;     // Указатель на функцию C_GetFunctionList
@@ -38,7 +38,7 @@ void isModule(const FunctionCallbackInfo<Value>& args) {
     bool ret = false;
 
     // Шаг 1: Загрузить библиотеку.
-    hModule = LoadLibrary("rtPKCS11ECP_2.dll");
+    hModule = LoadLibrary("rtPKCS11ECP.dll");
     if (hModule != NULL_PTR) ret = true;
 
     // Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
