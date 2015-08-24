@@ -44,7 +44,7 @@
     "v8_use_snapshot": "false",
     "visibility": "",
     "want_separate_host_toolset": 0,
-    "nodedir": "C:\\Users\\Romic\\.nw-gyp\\0.12.3",
+    "nodedir": "C:\\Users\\sopov.rv\\.nw-gyp\\0.12.3",
     "copy_dev_lib": "true",
     "standalone_static_library": 1,
     "target": "0.12.3"
