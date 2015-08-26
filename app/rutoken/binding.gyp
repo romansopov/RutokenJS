@@ -1,8 +1,8 @@
 {
     'targets': [{
-            'target_name': 'binding',
+            'target_name': 'rutoken',
             'sources': [
-                'binding.cc',
+                'rutoken.cc',
                 'include/Common.h'
             ],
             'include_dirs': [

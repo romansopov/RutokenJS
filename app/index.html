@@ -4,9 +4,19 @@
 </head>
 <body>
 <script type="text/javascript">
-    var rutoken = require('./rutoken/build/Release/binding');
-    console.log(rutoken);
-    console.log('rutoken.isDLL: ', rutoken.isDLL());
+
+var rutoken = require('./rutoken/build/Release/rutoken');
+var gui     = require('nw.gui');
+var fs      = require('fs');
+
+console.log(gui.App.dataPath);
+
+console.log('fnInitialize() ', rutoken.fnInitialize());
+console.log('isInitialize() ', rutoken.isInitialize());
+
+console.log('fnGetSlotList() ', rutoken.fnGetSlotList());
+
+console.log('fnGetSlotInfo() ', rutoken.fnGetSlotInfo(0));
 
 </script>
 </body>
