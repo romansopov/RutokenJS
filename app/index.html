@@ -14,9 +14,22 @@ console.log(gui.App.dataPath);
 console.log('fnInitialize() ', rutoken.fnInitialize());
 console.log('isInitialize() ', rutoken.isInitialize());
 
-console.log('fnGetSlotList() ', rutoken.fnGetSlotList());
+var cntSlot = rutoken.fnCountSlot();
+console.log('cntSlot: ', cntSlot);
 
-console.log('fnGetSlotInfo() ', rutoken.fnGetSlotInfo(0));
+if(cntSlot > 0) {
+    for(var i=0; i <= cntSlot-1; i++) {
+        rutoken.fnGetSlotInfo(i, function(data) {
+            console.log('Slot info #' + i + "\n", data);
+        });
+        rutoken.fnGetTokenInfo(i, function(data) {
+            console.log('Token info #' + i + "\n", data);
+        });
+        rutoken.fnGetMechanismList(i, function(data) {
+            console.log('Mechanism list #' + i + "\n", data);
+        });
+    }
+}
 
 </script>
 </body>
