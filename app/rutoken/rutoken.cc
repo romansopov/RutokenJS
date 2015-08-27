@@ -102,7 +102,7 @@ void fnGetSlotInfo(const FunctionCallbackInfo<Value>& args) {
     Isolate* isolate = Isolate::GetCurrent();
     HandleScope scope(isolate);
 
-    int slot = (int)args[0]->NumberValue();
+    int slot = aSlots[(int)args[0]->NumberValue()];
 
     // Callback
     Local<Function> cb   = Local<Function>::Cast(args[1]);
@@ -156,7 +156,7 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args) {
     Isolate* isolate = Isolate::GetCurrent();
     HandleScope scope(isolate);
 
-    int slot = (int)args[0]->NumberValue();
+    int slot = aSlots[(int)args[0]->NumberValue()];
 
     // Callback
     Local<Function> cb   = Local<Function>::Cast(args[1]);
@@ -252,7 +252,7 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
     Isolate* isolate = Isolate::GetCurrent();
     HandleScope scope(isolate);
 
-    int slot = (int)args[0]->NumberValue();
+    int slot = aSlots[(int)args[0]->NumberValue()];
 
     // Callback
     Local<Function> cb = Local<Function>::Cast(args[1]);
