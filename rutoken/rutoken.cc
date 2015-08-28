@@ -306,6 +306,33 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
 }
 
 //
+// Функция открывает сессию и авторизует пользователя на токене.
+//
+void fnLogin(const FunctionCallbackInfo<Value>& args) {
+    Isolate* isolate = Isolate::GetCurrent();
+    HandleScope scope(isolate);
+
+    int slot = aSlots[(int)args[0]->NumberValue()];
+
+    // PIN
+    String::Utf8Value arg1(args[1]->ToString());
+    std::string pin = std::string(*arg1);
+
+    // Открываем сессию
+    rv = pFunctionList->C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession);
+
+    if(rv == CKR_OK) {
+        // Выполняем аутентификацию
+        rv = pFunctionList->C_Login(hSession, CKU_USER, ((CK_UTF8CHAR_PTR)pin.c_str()), pin.size());
+    }
+
+    if(rv == CKR_OK) {
+        args.GetReturnValue().Set(0);
+    } else {
+        args.GetReturnValue().Set((int)rv * -1);
+    }
+}
+//
 // Инициализация функций и модуля
 //
 void init(Handle<Object> exports) {
@@ -315,5 +342,6 @@ void init(Handle<Object> exports) {
     NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
     NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
     NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
+    NODE_SET_METHOD(exports, "login",            fnLogin);
 }
 NODE_MODULE(rutoken, init);

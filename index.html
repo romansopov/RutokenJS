@@ -3,6 +3,7 @@
 <title>Test</title>
 </head>
 <body>
+<script type="text/javascript" src="error.js"></script>
 <script type="text/javascript">
 
 var rutoken = require('./rutoken/rutoken');
@@ -29,6 +30,13 @@ if(cntSlot > 0) {
             console.log('Mechanism list #' + i + "\n", data);
         });
     }
+
+    //console.log('Login: ', error[rutoken.login(0, '12345678')]);
+
+    if((rv = rutoken.login(0, '12345678')) != CKR_OK) {
+        console.log('Error: ' + CKR[rv]);
+    }
+
 }
 
 </script>
