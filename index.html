@@ -1,0 +1,36 @@
+<html>
+<head>
+<title>Test</title>
+</head>
+<body>
+<script type="text/javascript">
+
+var rutoken = require('./rutoken/rutoken');
+var gui     = require('nw.gui');
+var fs      = require('fs');
+
+console.log(gui.App.dataPath);
+
+console.log('initialize() ',   rutoken.initialize());
+console.log('isInitialize() ', rutoken.isInitialize());
+
+var cntSlot = rutoken.countSlot();
+console.log('cntSlot: ', cntSlot);
+
+if(cntSlot > 0) {
+    for(var i=0; i <= cntSlot-1; i++) {
+        rutoken.getSlotInfo(i, function(data) {
+            console.log('Slot info #' + i + "\n", data);
+        });
+        rutoken.getTokenInfo(i, function(data) {
+            console.log('Token info #' + i + "\n", data);
+        });
+        rutoken.getMechanismList(i, function(data) {
+            console.log('Mechanism list #' + i + "\n", data);
+        });
+    }
+}
+
+</script>
+</body>
+</html>
