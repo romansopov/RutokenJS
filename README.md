@@ -1,6 +1,6 @@
 # RutokenJS
 
-NW.js addons for Rutoken
+NW.js addons for [Rutoken](http://www.rutoken.ru/)
 
 ### Сборка
 ```
