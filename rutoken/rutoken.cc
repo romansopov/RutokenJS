@@ -39,6 +39,8 @@ Local<Integer> _I(Isolate* isolate, int value) {
 // Инициализация библиотеки rtPKCS11ECP.dll
 //
 void fnInitialize(const FunctionCallbackInfo<Value>& args) {
+    rv = CKR_FUNCTION_FAILED;
+
     // Шаг 1: Загрузить библиотеку.
     hModule = LoadLibrary("rutoken/libs/windows/Win32/rtPKCS11ECP.dll");
 
@@ -64,6 +66,7 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 
     args.GetReturnValue().Set(bInitialize);
 }
+
 void isInitialize(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(bInitialize);
 }
