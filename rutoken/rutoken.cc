@@ -12,7 +12,6 @@ HMODULE           hModule  = NULL_PTR; // Хэндл загруженной би
 CK_SESSION_HANDLE hSession = NULL_PTR; // Хэндл открытой сессии
 
 CK_FUNCTION_LIST_PTR pFunctionList     = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
-CK_C_GetFunctionList pfGetFunctionList = NULL_PTR; // Указатель на функцию C_GetFunctionList
 
 CK_SLOT_INFO      slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
 CK_TOKEN_INFO     tokenInfo; // Структура данных типа CK_TOKEN_INFO с информацией о токене
@@ -39,32 +38,45 @@ Local<Integer> _I(Isolate* isolate, int value) {
 // Инициализация библиотеки rtPKCS11ECP.dll
 //
 void fnInitialize(const FunctionCallbackInfo<Value>& args) {
-    rv = CKR_FUNCTION_FAILED;
 
-    // Шаг 1: Загрузить библиотеку.
-    hModule = LoadLibrary("rutoken/libs/windows/Win32/rtPKCS11ECP.dll");
+	if (!bInitialize)
+	{
+		rv = CKR_FUNCTION_FAILED;
 
-    // Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
-    if (hModule != NULL_PTR) {
-        pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
-    }
+		// Шаг 1: Загрузить библиотеку.
+		hModule = LoadLibrary("rutoken/libs/windows/x64/rtPKCS11ECP.dll");
 
-    // Шаг 3: Получить структуру с указателями на функции.
-    if (pfGetFunctionList != NULL_PTR) {
-        rv = pfGetFunctionList(&pFunctionList);
-    }
+		// Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
+		if (hModule != NULL_PTR) {
+			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList"); // Указатель на функцию C_GetFunctionList
 
-    // Шаг 4: Инициализировать библиотеку.
-    if(rv == CKR_OK) {
-        rv = pFunctionList->C_Initialize(NULL_PTR);
-    }
+			// Шаг 3: Получить структуру с указателями на функции.
+			if (pfGetFunctionList != NULL_PTR) {
+				rv = pfGetFunctionList(&pFunctionList);
 
-    // Шаг 5: Установить флаг isDLL = true.
-    if(rv == CKR_OK) {
-        bInitialize = true;
-    }
+				// Шаг 4: Инициализировать библиотеку.
+				if (rv == CKR_OK) {
+					rv = pFunctionList->C_Initialize(NULL_PTR);
 
-    args.GetReturnValue().Set(bInitialize);
+					// Шаг 5: Установить флаг isDLL = true.
+					if (rv == CKR_OK) {
+						bInitialize = true;
+					}
+					args.GetReturnValue().Set((int)rv);
+				}
+				else
+					args.GetReturnValue().Set(-3);
+			}
+			else
+				args.GetReturnValue().Set(-2);
+		}
+		else
+			args.GetReturnValue().Set(-1);
+
+		return;
+	}
+
+    args.GetReturnValue().Set(0);
 }
 
 void isInitialize(const FunctionCallbackInfo<Value>& args) {
