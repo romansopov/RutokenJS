@@ -71,6 +71,20 @@ void isInitialize(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(bInitialize);
 }
 
+void fnFinalize(const FunctionCallbackInfo<Value>& args) {
+
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = pFunctionList->C_Finalize(NULL_PTR);
+
+		if (rv == CKR_OK) {
+			bInitialize = false;
+		}
+	}
+
+	args.GetReturnValue().Set(!bInitialize);
+}
+
 //
 // Количество зарегистрированных слотов (подключенных токенов) в системе
 // Используется функция: C_GetSlotList
@@ -341,6 +355,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 void init(Handle<Object> exports) {
     NODE_SET_METHOD(exports, "initialize",       fnInitialize);
     NODE_SET_METHOD(exports, "isInitialize",     isInitialize);
+	NODE_SET_METHOD(exports, "finalize",         fnFinalize);
     NODE_SET_METHOD(exports, "countSlot",        fnCountSlot);
     NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
     NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
