@@ -352,7 +352,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 
     if(rv == CKR_OK) {
         // Выполняем аутентификацию
-        rv = pFunctionList->C_Login(hSession, CKU_USER, ((CK_UTF8CHAR_PTR)pin.c_str()), pin.size());
+        rv = pFunctionList->C_Login(hSession, CKU_USER, ((CK_UTF8CHAR_PTR)pin.c_str()), (CK_ULONG)pin.size());
     }
 
     if(rv == CKR_OK) {
