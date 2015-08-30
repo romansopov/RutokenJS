@@ -6,39 +6,46 @@
 <script type="text/javascript" src="const.js"></script>
 <script type="text/javascript">
 
-var rutoken = require('./rutoken/rutoken');
+var rutoken = require('./rutoken/build/Release/rutoken');
 var gui     = require('nw.gui');
 var fs      = require('fs');
 
 console.log(gui.App.dataPath);
 
 console.log('initialize() ',   rutoken.initialize());
-console.log('isInitialize() ', rutoken.isInitialize());
 
-var cntSlot = rutoken.countSlot();
-console.log('cntSlot: ', cntSlot);
+var isInitialize = rutoken.isInitialize();
+console.log('isInitialize() ', isInitialize);
 
-if(cntSlot > 0) {
-    for(var i=0; i <= cntSlot-1; i++) {
-        rutoken.getSlotInfo(i, function(data) {
-            console.log('Slot info #' + i + "\n", data);
-        });
-        rutoken.getTokenInfo(i, function(data) {
-            console.log('Token info #' + i + "\n", data);
-        });
-        rutoken.getMechanismList(i, function(data) {
-            console.log('Mechanism list #' + i + "\n", data);
-        });
-    }
+if(isInitialize) {
+	var cntSlot = rutoken.countSlot();
+	console.log('cntSlot: ', cntSlot);
 
-    //console.log('Login: ', error[rutoken.login(0, '12345678')]);
+	if(cntSlot > 0) {
+		for(var i=0; i <= cntSlot-1; i++) {
+			rutoken.getSlotInfo(i, function(data) {
+				console.log('Slot info #' + i + "\n", data);
+			});
+			rutoken.getTokenInfo(i, function(data) {
+				console.log('Token info #' + i + "\n", data);
+			});
+			rutoken.getMechanismList(i, function(data) {
+				console.log('Mechanism list #' + i + "\n", data);
+			});
+		}
 
-    if((rv = rutoken.login(0, '12345678')) != CKR_OK) {
-        console.log('Error: ' + CKR[rv]);
-    }
+		//console.log('Login: ', error[rutoken.login(0, '12345678')]);
 
+		if((rv = rutoken.login(0, '12345678')) != CKR_OK) {
+			console.log('Error: ' + CKR[rv]);
+		}
+
+	}
+	
+	console.log('finalize() ',   rutoken.finalize());
 }
 
+console.log('End');
 </script>
 </body>
 </html>
