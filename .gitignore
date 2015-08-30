@@ -1,3 +1,4 @@
 rutoken/build
 rutoken/build.bat
 rutoken/rutoken.node
+rutoken/include/config.h

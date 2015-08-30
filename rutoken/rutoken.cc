@@ -4,24 +4,24 @@
 #include <Common.h>
 #include <string>
 
+#include <config.h> // include/config.h #define PKCS11ECP_LIBRARY_PATH
+
 using namespace v8;
 
-bool              bInitialize = false; // Флаг инициализации библиотеки PKCS#11 fnInitialize()
-
-HMODULE           hModule  = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
-CK_SESSION_HANDLE hSession = NULL_PTR; // Хэндл открытой сессии
-
-CK_FUNCTION_LIST_PTR pFunctionList     = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
+bool                 bInitialize   = false;    // Флаг инициализации библиотеки PKCS#11 fnInitialize()
+HMODULE              hModule       = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
+CK_SESSION_HANDLE    hSession      = NULL_PTR; // Хэндл открытой сессии
+CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 
 CK_SLOT_INFO      slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
 CK_TOKEN_INFO     tokenInfo; // Структура данных типа CK_TOKEN_INFO с информацией о токене
 CK_MECHANISM_INFO mechInfo;  // Структура данных типа CK_MECHANISM_INFO с информацией о механизме
 
-CK_SLOT_ID_PTR aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
-CK_ULONG       ulSlotCount = 0;        // Количество идентификаторов всех доступных слотов в массиве
+CK_SLOT_ID_PTR        aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
+CK_MECHANISM_TYPE_PTR aMechanisms = NULL_PTR; // Указатель на массив механизмов, поддерживаемых слотом
 
-CK_MECHANISM_TYPE_PTR aMechanisms      = NULL_PTR; // Указатель на массив механизмов, поддерживаемых слотом
-CK_ULONG              ulMechanismCount = 0;        // Количество идентификаторов механизмов в массиве
+CK_ULONG ulSlotCount      = 0; // Количество идентификаторов всех доступных слотов в массиве
+CK_ULONG ulMechanismCount = 0; // Количество идентификаторов механизмов в массиве
 
 DWORD i      = 0;      // Вспомогательная переменная-счетчик для циклов
 CK_RV rv     = CKR_OK; // Вспомогательная переменная для хранения кода возврата
@@ -39,15 +39,15 @@ Local<Integer> _I(Isolate* isolate, int value) {
 //
 void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 
-	if (!bInitialize)
-	{
+    if (!bInitialize) {
 		rv = CKR_FUNCTION_FAILED;
 
 		// Шаг 1: Загрузить библиотеку.
-		hModule = LoadLibrary("rutoken/libs/windows/x64/rtPKCS11ECP.dll");
+		hModule = LoadLibrary(PKCS11ECP_LIBRARY_PATH);
 
 		// Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
 		if (hModule != NULL_PTR) {
+
 			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList"); // Указатель на функцию C_GetFunctionList
 
 			// Шаг 3: Получить структуру с указателями на функции.
@@ -57,44 +57,47 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 				// Шаг 4: Инициализировать библиотеку.
 				if (rv == CKR_OK) {
 					rv = pFunctionList->C_Initialize(NULL_PTR);
-
-					// Шаг 5: Установить флаг isDLL = true.
+					// Шаг 5: Установить флаг bInitialize = true.
 					if (rv == CKR_OK) {
 						bInitialize = true;
 					}
-					args.GetReturnValue().Set((int)rv);
 				}
-				else
-					args.GetReturnValue().Set(-3);
-			}
-			else
-				args.GetReturnValue().Set(-2);
+            }
 		}
-		else
-			args.GetReturnValue().Set(-1);
-
-		return;
 	}
+    
+    if(rv == CKR_OK || bInitialize) {
+        args.GetReturnValue().Set(0);
+    } else {
+        args.GetReturnValue().Set((int)rv * -1);
+    }
 
-    args.GetReturnValue().Set(0);
 }
 
+//
+// isInitialize
+//
 void isInitialize(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(bInitialize);
 }
 
+//
+// Finalize
+//
 void fnFinalize(const FunctionCallbackInfo<Value>& args) {
+    rv = CKR_GENERAL_ERROR;
 
-	if (bInitialize && pFunctionList != NULL_PTR)
-	{
+	if (bInitialize && pFunctionList != NULL_PTR) {
 		rv = pFunctionList->C_Finalize(NULL_PTR);
-
 		if (rv == CKR_OK) {
 			bInitialize = false;
 		}
 	}
-
-	args.GetReturnValue().Set(!bInitialize);
+    if(rv == CKR_OK) {
+        args.GetReturnValue().Set(0);
+    } else {
+        args.GetReturnValue().Set((int)rv * -1);
+    }
 }
 
 //
@@ -367,7 +370,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 void init(Handle<Object> exports) {
     NODE_SET_METHOD(exports, "initialize",       fnInitialize);
     NODE_SET_METHOD(exports, "isInitialize",     isInitialize);
-	NODE_SET_METHOD(exports, "finalize",         fnFinalize);
+	  NODE_SET_METHOD(exports, "finalize",         fnFinalize);
     NODE_SET_METHOD(exports, "countSlot",        fnCountSlot);
     NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
     NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
