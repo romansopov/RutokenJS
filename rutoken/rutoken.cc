@@ -40,32 +40,32 @@ Local<Integer> _I(Isolate* isolate, int value) {
 void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 
     if (!bInitialize) {
-		rv = CKR_FUNCTION_FAILED;
+        rv = CKR_FUNCTION_FAILED;
 
-		// Шаг 1: Загрузить библиотеку.
-		hModule = LoadLibrary(PKCS11ECP_LIBRARY_PATH);
+        // Шаг 1: Загрузить библиотеку.
+        hModule = LoadLibrary(PKCS11ECP_LIBRARY_PATH);
 
-		// Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
-		if (hModule != NULL_PTR) {
+        // Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
+        if (hModule != NULL_PTR) {
 
-			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList"); // Указатель на функцию C_GetFunctionList
+            CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList"); // Указатель на функцию C_GetFunctionList
 
-			// Шаг 3: Получить структуру с указателями на функции.
-			if (pfGetFunctionList != NULL_PTR) {
-				rv = pfGetFunctionList(&pFunctionList);
+            // Шаг 3: Получить структуру с указателями на функции.
+            if (pfGetFunctionList != NULL_PTR) {
+                rv = pfGetFunctionList(&pFunctionList);
 
-				// Шаг 4: Инициализировать библиотеку.
-				if (rv == CKR_OK) {
-					rv = pFunctionList->C_Initialize(NULL_PTR);
-					// Шаг 5: Установить флаг bInitialize = true.
-					if (rv == CKR_OK) {
-						bInitialize = true;
-					}
-				}
+                // Шаг 4: Инициализировать библиотеку.
+                if (rv == CKR_OK) {
+                    rv = pFunctionList->C_Initialize(NULL_PTR);
+                    // Шаг 5: Установить флаг bInitialize = true.
+                    if (rv == CKR_OK) {
+                        bInitialize = true;
+                    }
+                }
             }
-		}
-	}
-    
+        }
+    }
+
     if(rv == CKR_OK || bInitialize) {
         args.GetReturnValue().Set(0);
     } else {
@@ -87,12 +87,12 @@ void isInitialize(const FunctionCallbackInfo<Value>& args) {
 void fnFinalize(const FunctionCallbackInfo<Value>& args) {
     rv = CKR_GENERAL_ERROR;
 
-	if (bInitialize && pFunctionList != NULL_PTR) {
-		rv = pFunctionList->C_Finalize(NULL_PTR);
-		if (rv == CKR_OK) {
-			bInitialize = false;
-		}
-	}
+    if (bInitialize && pFunctionList != NULL_PTR) {
+        rv = pFunctionList->C_Finalize(NULL_PTR);
+        if (rv == CKR_OK) {
+            bInitialize = false;
+        }
+    }
     if(rv == CKR_OK) {
         args.GetReturnValue().Set(0);
     } else {
@@ -109,7 +109,7 @@ void fnCountSlot(const FunctionCallbackInfo<Value>& args) {
     rv = pFunctionList->C_GetSlotList(CK_TRUE, NULL_PTR, &ulSlotCount);
     if (rv == CKR_OK) {
         aSlots = (CK_SLOT_ID*)malloc(ulSlotCount * sizeof(CK_SLOT_ID));
-		memset(aSlots, 0, (ulSlotCount * sizeof(CK_SLOT_ID)));
+        memset(aSlots, 0, (ulSlotCount * sizeof(CK_SLOT_ID)));
         rv = pFunctionList->C_GetSlotList(CK_TRUE, aSlots, &ulSlotCount);
         if (rv == CKR_OK) {
             args.GetReturnValue().Set((int)ulSlotCount);
@@ -308,16 +308,16 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
             obj->Set(_S(isolate, "list"), arr);
 
             for (i = 0; i < ulMechanismCount; i++) {
-				memset(&mechInfo, 0, sizeof(CK_MECHANISM_INFO));
-				rv = pFunctionList->C_GetMechanismInfo(slot, aMechanisms[i], &mechInfo);
-				if (rv == CKR_OK) {
+                memset(&mechInfo, 0, sizeof(CK_MECHANISM_INFO));
+                rv = pFunctionList->C_GetMechanismInfo(slot, aMechanisms[i], &mechInfo);
+                if (rv == CKR_OK) {
                     Local<Object> objM = Object::New(isolate);
                     objM->Set(_S(isolate, "type"),       _I(isolate, (int)aMechanisms[i]));
                     objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)mechInfo.ulMinKeySize));
                     objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)mechInfo.ulMaxKeySize));
                     objM->Set(_S(isolate, "flags"),      _I(isolate, (int)mechInfo.flags));
                     arr->Set(i, objM);
-				} else {
+                } else {
                     break;
                 }
             }
@@ -370,7 +370,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 void init(Handle<Object> exports) {
     NODE_SET_METHOD(exports, "initialize",       fnInitialize);
     NODE_SET_METHOD(exports, "isInitialize",     isInitialize);
-	  NODE_SET_METHOD(exports, "finalize",         fnFinalize);
+      NODE_SET_METHOD(exports, "finalize",         fnFinalize);
     NODE_SET_METHOD(exports, "countSlot",        fnCountSlot);
     NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
     NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
