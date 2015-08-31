@@ -34,10 +34,16 @@ if(isInitialize) {
 			});
 		}
 
-		//console.log('Login: ', error[rutoken.login(0, '12345678')]);
-
-		if((rv = rutoken.login(0, '12345678')) != CKR_OK) {
-			console.log('Error: ' + CKR[rv]);
+		if((rv = rutoken.login(0, '12345678')) == CKR_OK) {
+			rutoken.random(64, function(res){
+				if(typeof(res) == 'object') {
+					console.log('Random success: ', res);
+				} else {
+					console.log('Random error: ', CKR[res]);
+				}
+			});
+		} else {
+			console.log('Login error: ' + CKR[rv]);
 		}
 
 	}

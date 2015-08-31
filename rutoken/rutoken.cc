@@ -8,9 +8,11 @@
 
 using namespace v8;
 
-bool				 bInitialize   = false;	// Флаг инициализации библиотеки PKCS#11 fnInitialize()
-HMODULE			  hModule	   = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
-CK_SESSION_HANDLE	hSession	  = NULL_PTR; // Хэндл открытой сессии
+bool bInitialize = false; // Флаг инициализации библиотеки PKCS#11 fnInitialize()
+bool bLogin      = false; // Флаг аутентификации
+
+HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
+CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
 CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 
 CK_SLOT_INFO	  slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
@@ -48,7 +50,8 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 		// Шаг 2: Получить адрес функции запроса структуры с указателями на функции.
 		if (hModule != NULL_PTR) {
 
-			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList"); // Указатель на функцию C_GetFunctionList
+			// Указатель на функцию C_GetFunctionList
+			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
 
 			// Шаг 3: Получить структуру с указателями на функции.
 			if (pfGetFunctionList != NULL_PTR) {
@@ -369,6 +372,65 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 		args.GetReturnValue().Set((int)rv * -1);
 	}
 }
+
+//
+// random(size, callback(res))
+// Генерирует случайное число размером size
+// Возвращает объект или код ошибки
+//
+void fnRandom(const FunctionCallbackInfo<Value>& args) {
+	Isolate* isolate = Isolate::GetCurrent();
+	HandleScope scope(isolate);
+
+	rv = CKR_ARGUMENTS_BAD;
+
+	// Callback
+	Local<Function> cb = Local<Function>::Cast(args[1]);
+
+	if(args.Length() == 2) {
+		rv = CKR_SESSION_HANDLE_INVALID;
+		CK_ULONG size = (CK_ULONG)args[0]->NumberValue();
+
+		// Если есть открытая сессия и успешная аутентификация
+		if(hSession != NULL_PTR) {
+			CK_BYTE *randomData = new CK_BYTE[size];
+
+			rv = pFunctionList->C_GenerateRandom(hSession, randomData, size);
+			if (rv == CKR_OK) {
+
+				Local<Object>   obj    = Object::New(isolate);
+				Local<Array>    arrInt = Array::New(isolate);
+				Local<Array>    arrHex = Array::New(isolate);
+
+				for (i = 0; i < size; i++) {
+					// Int array
+					arrInt->Set(i, _I(isolate, randomData[i]));
+
+					// Hex array
+					char buffer[2];
+					sprintf(buffer, "%02x", randomData[i]);
+					arrHex->Set(i, _S(isolate, buffer));
+				}
+
+				obj->Set(_S(isolate, "int"), arrInt);
+				obj->Set(_S(isolate, "hex"), arrHex);
+				obj->Set(_S(isolate, "length"), _I(isolate, size));
+
+				// Возврат объекта с массивами (int, hex) случайных данных
+				Local<Value> argv[1] = { obj };
+				cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+
+				return;
+			}
+		}
+	}
+
+	// Возврат кода ошибки
+	Local<Value> argv[1] = { _I(isolate, (int)rv * -1) };
+	cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+
+}
+
 //
 // Инициализация функций и модуля
 //
@@ -381,5 +443,6 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
 	NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
 	NODE_SET_METHOD(exports, "login",            fnLogin);
+	NODE_SET_METHOD(exports, "random",           fnRandom);
 }
 NODE_MODULE(rutoken, init);
