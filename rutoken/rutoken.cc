@@ -6,6 +6,8 @@
 
 #include <config.h> // include/config.h #define PKCS11ECP_LIBRARY_PATH
 
+#define STR_LEN(s) (sizeof(s)/sizeof(s[0]))
+
 using namespace v8;
 
 bool				 bInitialize   = false;	// Флаг инициализации библиотеки PKCS#11 fnInitialize()
@@ -27,11 +29,27 @@ DWORD i	  = 0;	  // Вспомогательная переменная-счет
 CK_RV rv	 = CKR_OK; // Вспомогательная переменная для хранения кода возврата
 CK_RV rvTemp = CKR_OK; // Вспомогательная переменная для хранения кода возврата
 
-Local<String> _S(Isolate* isolate, std::string value) {
+Local<String> _S(Isolate* isolate, const std::string& value) {
 	return String::NewFromUtf8(isolate, value.c_str());
 }
+
+Local<String> _S(Isolate* isolate, const CK_UTF8CHAR_PTR value, int maxSize)
+{
+	int len = maxSize;
+	for (const char* p = (const char*)value + maxSize - 1; p > (const char*)value && *p == 0x20; --p, --len) {}
+	return String::NewFromUtf8(isolate, (const char*)value, String::kNormalString, len);
+}
+
 Local<Integer> _I(Isolate* isolate, int value) {
 	return Integer::New(isolate, value);
+}
+
+Local<Object> version2Object(Isolate* isolate, const CK_VERSION& version)
+{
+	Local<Object> ret = Object::New(isolate);
+	ret->Set(_S(isolate, "major"), _I(isolate, (int)version.major));
+	ret->Set(_S(isolate, "minor"), _I(isolate, (int)version.minor));
+	return ret;
 }
 
 //
@@ -85,7 +103,7 @@ void isInitialize(const FunctionCallbackInfo<Value>& args) {
 // Finalize
 //
 void fnFinalize(const FunctionCallbackInfo<Value>& args) {
-	rv = CKR_GENERAL_ERROR;
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (bInitialize && pFunctionList != NULL_PTR) {
 		rv = pFunctionList->C_Finalize(NULL_PTR);
@@ -97,8 +115,51 @@ void fnFinalize(const FunctionCallbackInfo<Value>& args) {
 	if(rv == CKR_OK) {
 		args.GetReturnValue().Set(0);
 	} else {
-		args.GetReturnValue().Set((int)rv * -1);
+		args.GetReturnValue().Set(-(int)rv);
 	}
+}
+
+
+//
+// Получает информацию о библиотеке
+//
+void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
+	if (bInitialize && pFunctionList != NULL_PTR) {
+		CK_INFO info;
+		rv = pFunctionList->C_GetInfo(&info);
+
+		if (rv == CKR_OK)
+		{
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
+
+			Local<Object> obj = Object::New(isolate);
+
+			// cryptokiVersion
+			obj->Set(_S(isolate, "cryptokiVersion"), version2Object(isolate, info.cryptokiVersion));
+
+			// manufacturerID
+			obj->Set(_S(isolate, "manufacturerID"), _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
+
+			// flags
+			obj->Set(_S(isolate, "flags"), _I(isolate, info.flags));
+
+			// libraryDescription
+			obj->Set(_S(isolate, "libraryDescription"), _S(isolate, info.libraryDescription, STR_LEN(info.manufacturerID)));
+
+			// libraryVersion
+			obj->Set(_S(isolate, "libraryVersion"), version2Object(isolate, info.libraryVersion));
+
+			args.GetReturnValue().Set(obj);
+			return;
+		}
+	}
+	
+	args.GetReturnValue().Set(-(int)rv);
+
 }
 
 //
@@ -369,6 +430,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 		args.GetReturnValue().Set((int)rv * -1);
 	}
 }
+
 //
 // Инициализация функций и модуля
 //
@@ -376,6 +438,7 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "initialize",       fnInitialize);
 	NODE_SET_METHOD(exports, "isInitialize",     isInitialize);
     NODE_SET_METHOD(exports, "finalize",         fnFinalize);
+	NODE_SET_METHOD(exports, "getLibInfo",       fnGetLibInfo);
 	NODE_SET_METHOD(exports, "countSlot",        fnCountSlot);
 	NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
