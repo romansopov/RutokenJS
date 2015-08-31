@@ -4,6 +4,7 @@
             'sources': [
                 'rutoken.cc',
                 'include/Common.h'
+				'include/config.h'
             ],
             'include_dirs': [
                 'include'
