@@ -9,3 +9,23 @@
 nw-gyp configure --target=0.12.3
 nw-gyp build
 ```
+
+### API RutokenJS
+
+initialize()
+
+isInitialize()
+
+finalize()
+
+countSlot()
+
+getSlotInfo()
+
+getTokenInfo()
+
+getMechanismList()
+
+login()
+
+random()
