@@ -3,8 +3,9 @@
 #include <v8.h>
 #include <Common.h>
 #include <string>
+#include <config.h> // #define PKCS11ECP_LIBRARY_PATH для локального использования и добавлен в .gitignore
 
-#include <config.h> // include/config.h #define PKCS11ECP_LIBRARY_PATH
+#define STR_LEN(s) (sizeof(s)/sizeof(s[0]))
 
 using namespace v8;
 
@@ -15,25 +16,39 @@ HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библ
 CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
 CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 
-CK_SLOT_INFO	  slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
-CK_TOKEN_INFO	 tokenInfo; // Структура данных типа CK_TOKEN_INFO с информацией о токене
+CK_SLOT_INFO      slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
+CK_TOKEN_INFO     tokenInfo; // Структура данных типа CK_TOKEN_INFO с информацией о токене
 CK_MECHANISM_INFO mechInfo;  // Структура данных типа CK_MECHANISM_INFO с информацией о механизме
 
-CK_SLOT_ID_PTR		aSlots	  = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
+CK_SLOT_ID_PTR        aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
 CK_MECHANISM_TYPE_PTR aMechanisms = NULL_PTR; // Указатель на массив механизмов, поддерживаемых слотом
 
 CK_ULONG ulSlotCount	  = 0; // Количество идентификаторов всех доступных слотов в массиве
 CK_ULONG ulMechanismCount = 0; // Количество идентификаторов механизмов в массиве
 
-DWORD i	  = 0;	  // Вспомогательная переменная-счетчик для циклов
+DWORD i	  = 0;	       // Вспомогательная переменная-счетчик для циклов
 CK_RV rv	 = CKR_OK; // Вспомогательная переменная для хранения кода возврата
 CK_RV rvTemp = CKR_OK; // Вспомогательная переменная для хранения кода возврата
 
-Local<String> _S(Isolate* isolate, std::string value) {
+Local<String> _S(Isolate* isolate, const std::string& value) {
 	return String::NewFromUtf8(isolate, value.c_str());
 }
+Local<String> _S(Isolate* isolate, const CK_UTF8CHAR_PTR value, int maxSize) {
+	int len = maxSize;
+	for (const char* p = (const char*)value + maxSize - 1; p > (const char*)value && *p == 0x20; --p, --len) {}
+	return String::NewFromUtf8(isolate, (const char*)value, String::kNormalString, len);
+}
+
 Local<Integer> _I(Isolate* isolate, int value) {
 	return Integer::New(isolate, value);
+}
+
+Local<Object> version2Object(Isolate* isolate, const CK_VERSION& version)
+{
+	Local<Object> ret = Object::New(isolate);
+	ret->Set(_S(isolate, "major"), _I(isolate, (int)version.major));
+	ret->Set(_S(isolate, "minor"), _I(isolate, (int)version.minor));
+	return ret;
 }
 
 //
@@ -72,7 +87,7 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 	if(rv == CKR_OK || bInitialize) {
 		args.GetReturnValue().Set(0);
 	} else {
-		args.GetReturnValue().Set((int)rv * -1);
+		args.GetReturnValue().Set(-(int)rv);
 	}
 
 }
@@ -100,8 +115,51 @@ void fnFinalize(const FunctionCallbackInfo<Value>& args) {
 	if(rv == CKR_OK) {
 		args.GetReturnValue().Set(0);
 	} else {
-		args.GetReturnValue().Set((int)rv * -1);
+		args.GetReturnValue().Set(-(int)rv);
 	}
+}
+
+//
+// Получает информацию о библиотеке
+//
+void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		CK_INFO info;
+		rv = pFunctionList->C_GetInfo(&info);
+
+		if (rv == CKR_OK)
+		{
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
+
+			Local<Object> obj = Object::New(isolate);
+
+			// cryptokiVersion
+			obj->Set(_S(isolate, "cryptokiVersion"), version2Object(isolate, info.cryptokiVersion));
+
+			// manufacturerID
+			obj->Set(_S(isolate, "manufacturerID"), _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
+
+			// flags
+			obj->Set(_S(isolate, "flags"), _I(isolate, info.flags));
+
+			// libraryDescription
+			obj->Set(_S(isolate, "libraryDescription"), _S(isolate, info.libraryDescription, STR_LEN(info.manufacturerID)));
+
+			// libraryVersion
+			obj->Set(_S(isolate, "libraryVersion"), version2Object(isolate, info.libraryVersion));
+
+			args.GetReturnValue().Set(obj);
+			return;
+		}
+	}
+
+	args.GetReturnValue().Set(-(int)rv);
+
 }
 
 //
@@ -124,7 +182,7 @@ void fnCountSlot(const FunctionCallbackInfo<Value>& args) {
     if(rv == CKR_OK) {
 		args.GetReturnValue().Set(0);
 	} else {
-		args.GetReturnValue().Set((int)rv * -1);
+		args.GetReturnValue().Set(-(int)rv);
 	}
 
 }
@@ -133,55 +191,65 @@ void fnCountSlot(const FunctionCallbackInfo<Value>& args) {
 // Получить информацию из слота
 // Используется функция: C_GetSlotInfo
 //
-void fnGetSlotInfo(const FunctionCallbackInfo<Value>& args) {
-
+void fnGetSlotInfo(const FunctionCallbackInfo<Value>& args)
+{
 	Isolate* isolate = Isolate::GetCurrent();
 	HandleScope scope(isolate);
+	TryCatch trycatch(isolate);
 
-	int slot = aSlots[(int)args[0]->NumberValue()];
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	// Callback
-	Local<Function> cb   = Local<Function>::Cast(args[1]);
+	//Exception::Error(_S(isolate, "Exception"));
+	//MessageCallback("Exception");
+	//trycatch.Exception();
 
-	Local<Object>   obj   = Object::New(isolate);
-	Local<Object>   objHV = Object::New(isolate);
-	Local<Object>   objFV = Object::New(isolate);
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
 
-	rv = pFunctionList->C_GetSlotInfo(slot, &slotInfo);
+		//CK_INFO info;
+		//rv = pFunctionList->C_GetInfo(&info);
 
-	if (rv == CKR_OK) {
-		std::string str;
+		int slot = aSlots[(int)args[0]->NumberValue()];
 
-		// Slot description
-		str = (const char *)slotInfo.slotDescription;
-		obj->Set(_S(isolate, "description"), _S(isolate, str.substr(0, (int)sizeof(slotInfo.slotDescription))));
+		// Callback
+		Local<Function> cb   = Local<Function>::Cast(args[1]);
 
-		// Manufacturer
-		str = (const char *)slotInfo.manufacturerID;
-		obj->Set(_S(isolate, "manufacturerID"), _S(isolate, str.substr(0, (int)sizeof(slotInfo.manufacturerID))));
+		Local<Object>   obj   = Object::New(isolate);
+		Local<Object>   objHV = Object::New(isolate);
+		Local<Object>   objFV = Object::New(isolate);
 
-		// Flags
-		obj->Set(_S(isolate, "flags"), _I(isolate, (int)slotInfo.flags));
+		rv = pFunctionList->C_GetSlotInfo(slot, &slotInfo);
 
-		// Hardware Version
-		objHV->Set(_S(isolate, "major"), _I(isolate, (int)slotInfo.hardwareVersion.major));
-		objHV->Set(_S(isolate, "minor"), _I(isolate, (int)slotInfo.hardwareVersion.minor));
-		obj->Set(_S(isolate, "hardwareVersion"), objHV);
+		if (rv == CKR_OK) {
+			std::string str;
 
-		// Firmware Version
-		objFV->Set(_S(isolate, "major"), _I(isolate, (int)slotInfo.firmwareVersion.major));
-		objFV->Set(_S(isolate, "minor"), _I(isolate, (int)slotInfo.firmwareVersion.minor));
-		obj->Set(_S(isolate, "firmwareVersion"), objFV);
+			// Slot description
+			//str = (const char *)slotInfo.slotDescription;
+			//obj->Set(_S(isolate, "description"), _S(isolate, str.substr(0, (int)sizeof(slotInfo.slotDescription))));
+			obj->Set(_S(isolate, "description"), _S(isolate, slotInfo.slotDescription, STR_LEN(slotInfo.slotDescription)));
 
-		Local<Value> argv[1] = { obj };
-		cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			// Manufacturer
+			obj->Set(_S(isolate, "manufacturerID"), _S(isolate, slotInfo.manufacturerID, STR_LEN(slotInfo.manufacturerID)));
 
+			// Flags
+			obj->Set(_S(isolate, "flags"), _I(isolate, (int)slotInfo.flags));
+
+			// Hardware Version
+			obj->Set(_S(isolate, "hardwareVersion"), version2Object(isolate, slotInfo.hardwareVersion));
+
+			// Firmware Version
+			obj->Set(_S(isolate, "firmwareVersion"), version2Object(isolate, slotInfo.firmwareVersion));
+
+			Local<Value> argv[1] = { obj };
+			cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+
+		}
 	}
 
     if (rv == CKR_OK) {
         args.GetReturnValue().Set(0);
     } else {
-        args.GetReturnValue().Set((int)rv * -1);
+        args.GetReturnValue().Set(-(int)rv);
     }
 
 }
@@ -281,7 +349,7 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args) {
     if (rv == CKR_OK) {
         args.GetReturnValue().Set(0);
     } else {
-        args.GetReturnValue().Set((int)rv * -1);
+        args.GetReturnValue().Set(-(int)rv);
     }
 
 }
@@ -348,7 +416,8 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
 //
 // Функция открывает сессию и авторизует пользователя на токене.
 //
-void fnLogin(const FunctionCallbackInfo<Value>& args) {
+void fnLogin(const FunctionCallbackInfo<Value>& args)
+{
 	Isolate* isolate = Isolate::GetCurrent();
 	HandleScope scope(isolate);
 
@@ -369,7 +438,7 @@ void fnLogin(const FunctionCallbackInfo<Value>& args) {
 	if(rv == CKR_OK) {
 		args.GetReturnValue().Set(0);
 	} else {
-		args.GetReturnValue().Set((int)rv * -1);
+		args.GetReturnValue().Set(-(int)rv);
 	}
 }
 
@@ -426,7 +495,7 @@ void fnRandom(const FunctionCallbackInfo<Value>& args) {
 	}
 
 	// Возврат кода ошибки
-	Local<Value> argv[1] = { _I(isolate, (int)rv * -1) };
+	Local<Value> argv[1] = { _I(isolate, -(int)rv) };
 	cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
 
 }
@@ -438,6 +507,7 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "initialize",       fnInitialize);
 	NODE_SET_METHOD(exports, "isInitialize",     isInitialize);
     NODE_SET_METHOD(exports, "finalize",         fnFinalize);
+	NODE_SET_METHOD(exports, "getLibInfo",       fnGetLibInfo);
 	NODE_SET_METHOD(exports, "countSlot",        fnCountSlot);
 	NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);

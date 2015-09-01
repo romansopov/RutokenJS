@@ -18,6 +18,10 @@ var isInitialize = rutoken.isInitialize();
 console.log('isInitialize() ', isInitialize);
 
 if(isInitialize) {
+
+	var libInfo = rutoken.getLibInfo();
+	console.log('getLibInfo: ', libInfo);
+
 	var cntSlot = rutoken.countSlot();
 	console.log('cntSlot: ', cntSlot);
 

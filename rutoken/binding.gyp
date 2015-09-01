@@ -2,8 +2,7 @@
     'targets': [{
             'target_name': 'rutoken',
             'sources': [
-                'rutoken.cc',
-                'include/Common.h'
+                'rutoken.cc'
             ],
             'include_dirs': [
                 'include'
