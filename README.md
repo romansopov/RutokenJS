@@ -12,24 +12,24 @@ nw-gyp build
 
 ### API RutokenJS
 
-error initialize()
+*error* **initialize**()
 
-bool isInitialize()
+*bool* **isInitialize**()
 
-error finalize()
+*error* **finalize**()
 
-error|int countSlot()
+*error|int* **countSlot**()
 
-error|callback getLibInfo(function(data))
+*error|callback* **getLibInfo**(function(data))
 
-error|callback getSlotInfo(int slot, function(data))
+*error|callback* **getSlotInfo**(int slot, function(data))
 
-error|callback getTokenInfo(int slot, function(data))
+*error|callback* **getTokenInfo**(int slot, function(data))
 
-error|callback getMechanismList(int slot, function(data))
+*error|callback* **getMechanismList**(int slot, function(data))
 
-error login(int slot, string pin)
+*error* **login**(int slot, string pin)
 
-error|callback random(int size, function(data))
+*error|callback* **random**(int size, function(data))
 
-error initToken(int slot, string pin, string label)
+*error* **initToken**(int slot, string pin, string label)
