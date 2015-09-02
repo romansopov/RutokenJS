@@ -32,4 +32,4 @@ login()
 
 random()
 
-CKR initToken(int slotID, string PIN, string label)
+error initToken(int slot, string pin, string label)
