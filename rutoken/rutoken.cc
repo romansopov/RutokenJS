@@ -35,15 +35,13 @@ Local<String> _S(Isolate* isolate, const std::string& value) {
 }
 Local<String> _S(Isolate* isolate, const CK_UTF8CHAR_PTR value, int maxSize) {
 	int len = maxSize;
-	for (const char* p = (const char*)value + maxSize - 1; p > (const char*)value && *p == 0x20; --p, --len) {}
+	for (const char* p = (const char*)value + maxSize - 1; p >= (const char*)value && *p == 0x20; --p, --len) {}
 	return String::NewFromUtf8(isolate, (const char*)value, String::kNormalString, len);
 }
-
 Local<Integer> _I(Isolate* isolate, int value) {
 	return Integer::New(isolate, value);
 }
-
-Local<Object> version2Object(Isolate* isolate, const CK_VERSION& version)
+Local<Object> _V(Isolate* isolate, const CK_VERSION& version)
 {
 	Local<Object> ret = Object::New(isolate);
 	ret->Set(_S(isolate, "major"), _I(isolate, (int)version.major));
@@ -138,20 +136,11 @@ void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
 
 			Local<Object> obj = Object::New(isolate);
 
-			// cryptokiVersion
-			obj->Set(_S(isolate, "cryptokiVersion"), version2Object(isolate, info.cryptokiVersion));
-
-			// manufacturerID
-			obj->Set(_S(isolate, "manufacturerID"), _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
-
-			// flags
-			obj->Set(_S(isolate, "flags"), _I(isolate, info.flags));
-
-			// libraryDescription
+			obj->Set(_S(isolate, "cryptokiVersion"),    _V(isolate, info.cryptokiVersion));
+			obj->Set(_S(isolate, "manufacturerID"),     _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
+			obj->Set(_S(isolate, "flags"),              _I(isolate, info.flags));
 			obj->Set(_S(isolate, "libraryDescription"), _S(isolate, info.libraryDescription, STR_LEN(info.manufacturerID)));
-
-			// libraryVersion
-			obj->Set(_S(isolate, "libraryVersion"), version2Object(isolate, info.libraryVersion));
+			obj->Set(_S(isolate, "libraryVersion"),     _V(isolate, info.libraryVersion));
 
 			args.GetReturnValue().Set(obj);
 			return;
@@ -214,31 +203,18 @@ void fnGetSlotInfo(const FunctionCallbackInfo<Value>& args)
 		// Callback
 		Local<Function> cb   = Local<Function>::Cast(args[1]);
 
-		Local<Object>   obj   = Object::New(isolate);
-		Local<Object>   objHV = Object::New(isolate);
-		Local<Object>   objFV = Object::New(isolate);
+		Local<Object> obj = Object::New(isolate);
 
 		rv = pFunctionList->C_GetSlotInfo(slot, &slotInfo);
 
 		if (rv == CKR_OK) {
 			std::string str;
 
-			// Slot description
-			//str = (const char *)slotInfo.slotDescription;
-			//obj->Set(_S(isolate, "description"), _S(isolate, str.substr(0, (int)sizeof(slotInfo.slotDescription))));
-			obj->Set(_S(isolate, "description"), _S(isolate, slotInfo.slotDescription, STR_LEN(slotInfo.slotDescription)));
-
-			// Manufacturer
-			obj->Set(_S(isolate, "manufacturerID"), _S(isolate, slotInfo.manufacturerID, STR_LEN(slotInfo.manufacturerID)));
-
-			// Flags
-			obj->Set(_S(isolate, "flags"), _I(isolate, (int)slotInfo.flags));
-
-			// Hardware Version
-			obj->Set(_S(isolate, "hardwareVersion"), version2Object(isolate, slotInfo.hardwareVersion));
-
-			// Firmware Version
-			obj->Set(_S(isolate, "firmwareVersion"), version2Object(isolate, slotInfo.firmwareVersion));
+			obj->Set(_S(isolate, "description"),     _S(isolate, slotInfo.slotDescription, STR_LEN(slotInfo.slotDescription)));
+			obj->Set(_S(isolate, "manufacturerID"),  _S(isolate, slotInfo.manufacturerID,  STR_LEN(slotInfo.manufacturerID)));
+			obj->Set(_S(isolate, "flags"),           _I(isolate, (int)slotInfo.flags));
+			obj->Set(_S(isolate, "hardwareVersion"), _V(isolate, slotInfo.hardwareVersion));
+			obj->Set(_S(isolate, "firmwareVersion"), _V(isolate, slotInfo.firmwareVersion));
 
 			Local<Value> argv[1] = { obj };
 			cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
@@ -268,9 +244,7 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args) {
 	// Callback
 	Local<Function> cb   = Local<Function>::Cast(args[1]);
 
-	Local<Object>   obj   = Object::New(isolate);
-	Local<Object>   objHV = Object::New(isolate);
-	Local<Object>   objFV = Object::New(isolate);
+	Local<Object> obj   = Object::New(isolate);
 
 	memset(&tokenInfo, 0, sizeof(CK_TOKEN_INFO));
 	rv = pFunctionList->C_GetTokenInfo(slot, &tokenInfo);
@@ -278,68 +252,24 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args) {
 	if (rv == CKR_OK) {
 		std::string str;
 
-		// Token label
-		str = (const char *)tokenInfo.label;
-		obj->Set(_S(isolate, "label"), _S(isolate, str.substr(0, (int)sizeof(tokenInfo.label))));
-
-		// Manufacturer
-		str = (const char *)tokenInfo.manufacturerID;
-		obj->Set(_S(isolate, "manufacturerID"), _S(isolate, str.substr(0, (int)sizeof(tokenInfo.manufacturerID))));
-
-		// Token model
-		str = (const char *)tokenInfo.model;
-		obj->Set(_S(isolate, "model"), _S(isolate, str.substr(0, (int)sizeof(tokenInfo.model))));
-
-		// Token serial number
-		str = (const char *)tokenInfo.serialNumber;
-		obj->Set(_S(isolate, "serialNumber"), _S(isolate, str.substr(0, (int)sizeof(tokenInfo.serialNumber))));
-
-		// Flags
-		obj->Set(_S(isolate, "flags"), _I(isolate, (int)tokenInfo.flags));
-
-		// Max session count
-		obj->Set(_S(isolate, "maxSessionCount"), _I(isolate, (int)tokenInfo.ulMaxSessionCount));
-
-		// Current session count
-		obj->Set(_S(isolate, "sessionCount"), _I(isolate, (int)tokenInfo.ulSessionCount));
-
-		// Max RW session count
-		obj->Set(_S(isolate, "maxRwSessionCount"), _I(isolate, (int)tokenInfo.ulMaxRwSessionCount));
-
-		// Current RW session count
-		obj->Set(_S(isolate, "rwSessionCount"), _I(isolate, (int)tokenInfo.ulRwSessionCount));
-
-		// Max PIN length
-		obj->Set(_S(isolate, "maxPinLen"), _I(isolate, (int)tokenInfo.ulMaxPinLen));
-
-		// Min PIN length
-		obj->Set(_S(isolate, "minPinLen"), _I(isolate, (int)tokenInfo.ulMinPinLen));
-
-		// Total public memory
-		obj->Set(_S(isolate, "totalPublicMemory"), _I(isolate, (int)tokenInfo.ulTotalPublicMemory));
-
-		// Free public memory
-		obj->Set(_S(isolate, "freePublicMemory"), _I(isolate, (int)tokenInfo.ulFreePublicMemory));
-
-		// Total private memory
+		obj->Set(_S(isolate, "label"),              _S(isolate, tokenInfo.label, STR_LEN(tokenInfo.label)));
+		obj->Set(_S(isolate, "manufacturerID"),     _S(isolate, tokenInfo.manufacturerID, STR_LEN(tokenInfo.manufacturerID)));
+		obj->Set(_S(isolate, "model"),              _S(isolate, tokenInfo.model, STR_LEN(tokenInfo.model)));
+		obj->Set(_S(isolate, "serialNumber"),       _S(isolate, tokenInfo.serialNumber, STR_LEN(tokenInfo.serialNumber)));
+		obj->Set(_S(isolate, "flags"),              _I(isolate, (int)tokenInfo.flags));
+		obj->Set(_S(isolate, "maxSessionCount"),    _I(isolate, (int)tokenInfo.ulMaxSessionCount));
+		obj->Set(_S(isolate, "sessionCount"),       _I(isolate, (int)tokenInfo.ulSessionCount));
+		obj->Set(_S(isolate, "maxRwSessionCount"),  _I(isolate, (int)tokenInfo.ulMaxRwSessionCount));
+		obj->Set(_S(isolate, "rwSessionCount"),     _I(isolate, (int)tokenInfo.ulRwSessionCount));
+		obj->Set(_S(isolate, "maxPinLen"),          _I(isolate, (int)tokenInfo.ulMaxPinLen));
+		obj->Set(_S(isolate, "minPinLen"),          _I(isolate, (int)tokenInfo.ulMinPinLen));
+		obj->Set(_S(isolate, "totalPublicMemory"),  _I(isolate, (int)tokenInfo.ulTotalPublicMemory));
+		obj->Set(_S(isolate, "freePublicMemory"),   _I(isolate, (int)tokenInfo.ulFreePublicMemory));
 		obj->Set(_S(isolate, "totalPrivateMemory"), _I(isolate, (int)tokenInfo.ulTotalPrivateMemory));
-
-		// Free private memory
-		obj->Set(_S(isolate, "freePrivateMemory"), _I(isolate, (int)tokenInfo.ulFreePrivateMemory));
-
-		// Hardware version
-		objHV->Set(_S(isolate, "major"), _I(isolate, (int)tokenInfo.hardwareVersion.major));
-		objHV->Set(_S(isolate, "minor"), _I(isolate, (int)tokenInfo.hardwareVersion.minor));
-		obj->Set(_S(isolate, "hardwareVersion"), objHV);
-
-		// Firmware version
-		objFV->Set(_S(isolate, "major"), _I(isolate, (int)tokenInfo.firmwareVersion.major));
-		objFV->Set(_S(isolate, "minor"), _I(isolate, (int)tokenInfo.firmwareVersion.minor));
-		obj->Set(_S(isolate, "firmwareVersion"), objFV);
-
-		// Timer #
-		str = (const char *)tokenInfo.utcTime;
-		obj->Set(_S(isolate, "utcTime"), _S(isolate, str.substr(0, (int)sizeof(tokenInfo.utcTime))));
+		obj->Set(_S(isolate, "freePrivateMemory"),  _I(isolate, (int)tokenInfo.ulFreePrivateMemory));
+		obj->Set(_S(isolate, "hardwareVersion"),    _V(isolate, tokenInfo.hardwareVersion));
+		obj->Set(_S(isolate, "firmwareVersion"),    _V(isolate, tokenInfo.firmwareVersion));
+		obj->Set(_S(isolate, "utcTime"),            _S(isolate, tokenInfo.utcTime, STR_LEN(tokenInfo.utcTime)));
 
 		Local<Value> argv[1] = { obj };
 		cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
@@ -388,10 +318,10 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
 				rv = pFunctionList->C_GetMechanismInfo(slot, aMechanisms[i], &mechInfo);
 				if (rv == CKR_OK) {
 					Local<Object> objM = Object::New(isolate);
-					objM->Set(_S(isolate, "type"),	   _I(isolate, (int)aMechanisms[i]));
+					objM->Set(_S(isolate, "type"),	     _I(isolate, (int)aMechanisms[i]));
 					objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)mechInfo.ulMinKeySize));
 					objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)mechInfo.ulMaxKeySize));
-					objM->Set(_S(isolate, "flags"),	  _I(isolate, (int)mechInfo.flags));
+					objM->Set(_S(isolate, "flags"),	     _I(isolate, (int)mechInfo.flags));
 					arr->Set(i, objM);
 				} else {
 					break;
@@ -481,8 +411,8 @@ void fnRandom(const FunctionCallbackInfo<Value>& args) {
 					arrHex->Set(i, _S(isolate, buffer));
 				}
 
-				obj->Set(_S(isolate, "int"), arrInt);
-				obj->Set(_S(isolate, "hex"), arrHex);
+				obj->Set(_S(isolate, "int"),    arrInt);
+				obj->Set(_S(isolate, "hex"),    arrHex);
 				obj->Set(_S(isolate, "length"), _I(isolate, size));
 
 				// Возврат объекта с массивами (int, hex) случайных данных
