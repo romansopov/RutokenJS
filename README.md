@@ -12,19 +12,19 @@ nw-gyp build
 
 ### API RutokenJS
 
-initialize()
+error initialize()
 
-isInitialize()
+bool isInitialize()
 
-finalize()
+error finalize()
 
-countSlot()
+error|int countSlot()
 
-getLibInfo()
+error|object getLibInfo()
 
-getSlotInfo()
+error|callback getSlotInfo(int slot, function(data))
 
-getTokenInfo()
+error|callback getTokenInfo(int slot, function(data))
 
 getMechanismList()
 
