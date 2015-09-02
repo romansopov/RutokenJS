@@ -16,9 +16,8 @@ HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библ
 CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
 CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 
-CK_SLOT_ID_PTR        aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
-
-CK_ULONG ulSlotCount	  = 0; // Количество идентификаторов всех доступных слотов в массиве
+CK_SLOT_ID_PTR  aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
+CK_ULONG        ulSlotCount = 0;        // Количество идентификаторов всех доступных слотов в массиве
 
 DWORD i	  = 0;	       // Вспомогательная переменная-счетчик для циклов
 CK_RV rv	 = CKR_OK; // Вспомогательная переменная для хранения кода возврата
@@ -78,9 +77,7 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args)
 			}
 		}
 	}
-
 	args.GetReturnValue().Set(-(int)rv);
-
 }
 
 //
@@ -402,28 +399,34 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 //
 void fnLogin(const FunctionCallbackInfo<Value>& args)
 {
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	int slot = aSlots[(int)args[0]->NumberValue()];
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
 
-	// PIN
-	String::Utf8Value arg1(args[1]->ToString());
-	std::string pin = std::string(*arg1);
+		if (args.Length() == 2)
+		{
+			rv = CKR_SLOT_ID_INVALID;
 
-	// Открываем сессию
-	rv = pFunctionList->C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession);
+			if (aSlots != NULL)
+			{
+				int arg0 = (int)args[0]->NumberValue();
+				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+				{
+					int slot = aSlots[arg0];
+					String::Utf8Value pin(args[1]->ToString());
 
-	if(rv == CKR_OK) {
-		// Выполняем аутентификацию
-		rv = pFunctionList->C_Login(hSession, CKU_USER, ((CK_UTF8CHAR_PTR)pin.c_str()), (CK_ULONG)pin.size());
+					rv = pFunctionList->C_OpenSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession);
+
+					if(rv == CKR_OK) {
+						rv = pFunctionList->C_Login(hSession, CKU_USER, (CK_UTF8CHAR_PTR)*pin, pin.length());
+					}
+				}
+			}
+		}
 	}
-
-	if(rv == CKR_OK) {
-		args.GetReturnValue().Set(0);
-	} else {
-		args.GetReturnValue().Set(-(int)rv);
-	}
+	args.GetReturnValue().Set(-(int)rv);
 }
 
 //
@@ -431,57 +434,63 @@ void fnLogin(const FunctionCallbackInfo<Value>& args)
 // Генерирует случайное число размером size
 // Возвращает объект или код ошибки
 //
-void fnRandom(const FunctionCallbackInfo<Value>& args) {
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
+void fnRandom(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	rv = CKR_ARGUMENTS_BAD;
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
 
-	// Callback
-	Local<Function> cb = Local<Function>::Cast(args[1]);
+		if (args.Length() == 2)
+		{
+			rv = CKR_SESSION_HANDLE_INVALID;
 
-	if(args.Length() == 2) {
-		rv = CKR_SESSION_HANDLE_INVALID;
-		CK_ULONG size = (CK_ULONG)args[0]->NumberValue();
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
 
-		// Если есть открытая сессия и успешная аутентификация
-		if(hSession != NULL_PTR) {
-			CK_BYTE *randomData = new CK_BYTE[size];
+			Local<Function> callback = Local<Function>::Cast(args[1]);
+			Local<Object>   object   = Object::New(isolate);
 
-			rv = pFunctionList->C_GenerateRandom(hSession, randomData, size);
-			if (rv == CKR_OK) {
+			if(hSession != NULL_PTR)
+			{
+				CK_ULONG size = (CK_ULONG)args[0]->NumberValue();
+				CK_BYTE *randomData = new CK_BYTE[size];
 
-				Local<Object>   obj    = Object::New(isolate);
-				Local<Array>    arrInt = Array::New(isolate);
-				Local<Array>    arrHex = Array::New(isolate);
+				rv = pFunctionList->C_GenerateRandom(hSession, randomData, size);
+				if (rv == CKR_OK) {
 
-				for (i = 0; i < size; i++) {
-					// Int array
-					arrInt->Set(i, _I(isolate, randomData[i]));
+					Local<Array> arrInt = Array::New(isolate);
+					Local<Array> arrHex = Array::New(isolate);
 
-					// Hex array
-					char buffer[2];
-					sprintf(buffer, "%02x", randomData[i]);
-					arrHex->Set(i, _S(isolate, buffer));
+					for (i = 0; i < size; i++) {
+						// Int array
+						arrInt->Set(i, _I(isolate, randomData[i]));
+
+						// Hex array
+						char buffer[2];
+						sprintf(buffer, "%02x", randomData[i]);
+						arrHex->Set(i, _S(isolate, buffer));
+					}
+
+					object->Set(_S(isolate, "error"),  _I(isolate, -(int)rv));
+					object->Set(_S(isolate, "length"), _I(isolate, size));
+					object->Set(_S(isolate, "int"),    arrInt);
+					object->Set(_S(isolate, "hex"),    arrHex);
+
+					Local<Value> argv[1] = { object };
+					callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+					return;
 				}
-
-				obj->Set(_S(isolate, "int"),    arrInt);
-				obj->Set(_S(isolate, "hex"),    arrHex);
-				obj->Set(_S(isolate, "length"), _I(isolate, size));
-
-				// Возврат объекта с массивами (int, hex) случайных данных
-				Local<Value> argv[1] = { obj };
-				cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
-				return;
 			}
+
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
 		}
 	}
-
-	// Возврат кода ошибки
-	Local<Value> argv[1] = { _I(isolate, -(int)rv) };
-	cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
+    args.GetReturnValue().Set(-(int)rv);
 }
 
 //
@@ -494,32 +503,26 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 
 	if (bInitialize && pFunctionList != NULL_PTR)
 	{
+		rv = CKR_ARGUMENTS_BAD;
+
 		if (args.Length() == 3)
 		{
+			rv = CKR_SLOT_ID_INVALID;
+
 			if (aSlots != NULL)
 			{
-				Isolate* isolate = Isolate::GetCurrent();
-				HandleScope scope(isolate);
-
 				int arg0 = (int)args[0]->NumberValue();
 				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
 				{
-					int slotId = aSlots[arg0];
+					int slot = aSlots[arg0];
 					String::Utf8Value pin(args[1]->ToString());
 					String::Utf8Value label(args[2]->ToString());
 
-					rv = pFunctionList->C_InitToken(slotId, (CK_UTF8CHAR_PTR)*pin, pin.length(), (CK_UTF8CHAR_PTR)*label);
-				} else {
-					rv = CKR_SLOT_ID_INVALID;
+					rv = pFunctionList->C_InitToken(slot, (CK_UTF8CHAR_PTR)*pin, pin.length(), (CK_UTF8CHAR_PTR)*label);
 				}
-			} else {
-				rv = CKR_SLOT_ID_INVALID;
 			}
-		} else {
-			rv = CKR_ARGUMENTS_BAD;
 		}
 	}
-
 	args.GetReturnValue().Set(-(int)rv);
 }
 

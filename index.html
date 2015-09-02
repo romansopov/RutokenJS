@@ -33,7 +33,7 @@ if(isInitialize) {
 	if(cntSlot > 0) {
 
 		// !!! initToken
-		// console.log('initToken: ', CKR[rutoken.initToken(0, '87654321', 'Test')]);
+		//console.log('initToken: ', CKR[rutoken.initToken(0, '87654321', 'Test')]);
 		// !!! initToken
 
 		for(var i=0; i <= cntSlot-1; i++) {
@@ -50,11 +50,7 @@ if(isInitialize) {
 
 		if((rv = rutoken.login(0, '12345678')) == CKR_OK) {
 			rutoken.random(64, function(res){
-				if(typeof(res) == 'object') {
-					console.log('Random success: ', res);
-				} else {
-					console.log('Random error: ', CKR[res]);
-				}
+				console.log('Random: ', res);
 			});
 		} else {
 			console.log('Login error: ' + CKR[rv]);
