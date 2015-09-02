@@ -103,7 +103,7 @@ void isInitialize(const FunctionCallbackInfo<Value>& args) {
 // Finalize
 //
 void fnFinalize(const FunctionCallbackInfo<Value>& args) {
-	rv = CKR_GENERAL_ERROR;
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (bInitialize && pFunctionList != NULL_PTR) {
 		rv = pFunctionList->C_Finalize(NULL_PTR);
@@ -501,6 +501,45 @@ void fnRandom(const FunctionCallbackInfo<Value>& args) {
 }
 
 //
+// Инициализирует память Рутокен
+// Используется функция: C_InitToken
+//
+// Функция готова к использованию, но закомментирована потому что нет устройства чтобы протестировать правильную работу функции
+//void fnInitToken(const FunctionCallbackInfo<Value>& args)
+//{
+//	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+//	if (bInitialize && pFunctionList != NULL_PTR)
+//	{
+//		if (args.Length() < 3)
+//		{
+//			if (aSlots != NULL)
+//			{
+//				Isolate* isolate = Isolate::GetCurrent();
+//				HandleScope scope(isolate);
+//
+//				int arg0 = (int)args[0]->NumberValue();
+//				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+//				{
+//					int slotId = aSlots[arg0];
+//					String::Utf8Value pin(args[1]->ToString());
+//					String::Utf8Value label(args[2]->ToString());
+//
+//					rv = pFunctionList->C_InitToken(slotId, (CK_UTF8CHAR_PTR)*pin, pin.length(), (CK_UTF8CHAR_PTR)*label);
+//				}
+//				else
+//					rv = CKR_SLOT_ID_INVALID;
+//			}
+//			else
+//				rv = CKR_SLOT_ID_INVALID;
+//		}
+//		else
+//			rv = CKR_ARGUMENTS_BAD;
+//	}
+//
+//	args.GetReturnValue().Set(-(int)rv);
+//}
+
+//
 // Инициализация функций и модуля
 //
 void init(Handle<Object> exports) {
@@ -514,5 +553,7 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
 	NODE_SET_METHOD(exports, "login",            fnLogin);
 	NODE_SET_METHOD(exports, "random",           fnRandom);
+	// Функция готова к использованию, но закомментирована потому что нет устройства чтобы протестировать правильную работу функции
+	//NODE_SET_METHOD(exports, "initToken",        fnInitToken);
 }
 NODE_MODULE(rutoken, init);
