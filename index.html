@@ -9,8 +9,12 @@
 var rutoken = require('./rutoken/build/Release/rutoken');
 var gui     = require('nw.gui');
 var fs      = require('fs');
+var Crypto  = require('crypto');
 
-console.log(gui.App.dataPath);
+//Crypto.setEngine('ENGINE_METHOD_ALL');
+console.log('Ciphers: ', Crypto.getCiphers());
+console.log('Hashes: ', Crypto.getHashes());
+console.log('Path: ', gui.App.dataPath);
 
 console.log('initialize() ',   rutoken.initialize());
 
@@ -26,6 +30,11 @@ if(isInitialize) {
 	console.log('cntSlot: ', cntSlot);
 
 	if(cntSlot > 0) {
+
+		// !!! initToken
+		// console.log('initToken: ', CKR[rutoken.initToken(0, '87654321', 'Test')]);
+		// !!! initToken
+
 		for(var i=0; i <= cntSlot-1; i++) {
 			rutoken.getSlotInfo(i, function(data) {
 				console.log('Slot info #' + i + "\n", data);
