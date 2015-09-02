@@ -28,7 +28,7 @@ error|callback getTokenInfo(int slot, function(data))
 
 error|callback getMechanismList(int slot, function(data))
 
-login()
+error login(int slot, string pin)
 
 random()
 
