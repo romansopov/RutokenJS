@@ -20,6 +20,8 @@ finalize()
 
 countSlot()
 
+getLibInfo()
+
 getSlotInfo()
 
 getTokenInfo()
@@ -29,3 +31,5 @@ getMechanismList()
 login()
 
 random()
+
+CKR initToken(int slotID, string PIN, string label)
