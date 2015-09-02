@@ -20,7 +20,7 @@ error finalize()
 
 error|int countSlot()
 
-error|object getLibInfo()
+error|callback getLibInfo(function(data))
 
 error|callback getSlotInfo(int slot, function(data))
 
