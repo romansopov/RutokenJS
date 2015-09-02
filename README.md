@@ -30,6 +30,6 @@ error|callback getMechanismList(int slot, function(data))
 
 error login(int slot, string pin)
 
-random()
+error|callback random(int size, function(data))
 
 error initToken(int slot, string pin, string label)
