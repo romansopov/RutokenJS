@@ -26,7 +26,7 @@ error|callback getSlotInfo(int slot, function(data))
 
 error|callback getTokenInfo(int slot, function(data))
 
-getMechanismList()
+error|callback getMechanismList(int slot, function(data))
 
 login()
 
