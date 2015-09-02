@@ -16,15 +16,16 @@ console.log('Ciphers: ', Crypto.getCiphers());
 console.log('Hashes: ', Crypto.getHashes());
 console.log('Path: ', gui.App.dataPath);
 
-console.log('initialize() ',   rutoken.initialize());
+console.log('initialize() ',  CKR[rutoken.initialize()]);
 
 var isInitialize = rutoken.isInitialize();
 console.log('isInitialize() ', isInitialize);
 
 if(isInitialize) {
 
-	var libInfo = rutoken.getLibInfo();
-	console.log('getLibInfo: ', libInfo);
+	rutoken.getLibInfo(function(res) {
+		console.log('getLibInfo: \n', res);
+	})
 
 	var cntSlot = rutoken.countSlot();
 	console.log('cntSlot: ', cntSlot);
@@ -36,11 +37,11 @@ if(isInitialize) {
 		// !!! initToken
 
 		for(var i=0; i <= cntSlot-1; i++) {
-			rutoken.getSlotInfo(i, function(data) {
-				console.log('Slot info #' + i + "\n", data);
+			rutoken.getSlotInfo(i, function(res) {
+				console.log('Slot info #' + i + "\n", res);
 			});
-			rutoken.getTokenInfo(i, function(data) {
-				console.log('Token info #' + i + "\n", data);
+			rutoken.getTokenInfo(i, function(res) {
+				console.log('Token info #' + i + "\n", res);
 			});
 			rutoken.getMechanismList(i, function(data) {
 				console.log('Mechanism list #' + i + "\n", data);
@@ -61,7 +62,7 @@ if(isInitialize) {
 
 	}
 
-	console.log('finalize() ',   rutoken.finalize());
+	console.log('finalize() ', CKR[rutoken.finalize()]);
 }
 
 console.log('End');

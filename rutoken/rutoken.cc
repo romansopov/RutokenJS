@@ -16,15 +16,9 @@ HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библ
 CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
 CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
 
-CK_SLOT_INFO      slotInfo;  // Структура данных типа CK_SLOT_INFO с информацией о слоте
-CK_TOKEN_INFO     tokenInfo; // Структура данных типа CK_TOKEN_INFO с информацией о токене
-CK_MECHANISM_INFO mechInfo;  // Структура данных типа CK_MECHANISM_INFO с информацией о механизме
-
 CK_SLOT_ID_PTR        aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
-CK_MECHANISM_TYPE_PTR aMechanisms = NULL_PTR; // Указатель на массив механизмов, поддерживаемых слотом
 
 CK_ULONG ulSlotCount	  = 0; // Количество идентификаторов всех доступных слотов в массиве
-CK_ULONG ulMechanismCount = 0; // Количество идентификаторов механизмов в массиве
 
 DWORD i	  = 0;	       // Вспомогательная переменная-счетчик для циклов
 CK_RV rv	 = CKR_OK; // Вспомогательная переменная для хранения кода возврата
@@ -50,9 +44,12 @@ Local<Object> _V(Isolate* isolate, const CK_VERSION& version)
 }
 
 //
-// Инициализация библиотеки rtPKCS11ECP.dll
+// Инициализация библиотеки rtPKCS11ECP
+// Return: error (CKR_*)
 //
-void fnInitialize(const FunctionCallbackInfo<Value>& args) {
+void fnInitialize(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (!bInitialize) {
 		rv = CKR_FUNCTION_FAILED;
@@ -82,25 +79,24 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args) {
 		}
 	}
 
-	if(rv == CKR_OK || bInitialize) {
-		args.GetReturnValue().Set(0);
-	} else {
-		args.GetReturnValue().Set(-(int)rv);
-	}
+	args.GetReturnValue().Set(-(int)rv);
 
 }
 
 //
-// isInitialize
+// Возвращает флаг инициализации
+// Return: bool
 //
 void isInitialize(const FunctionCallbackInfo<Value>& args) {
 	args.GetReturnValue().Set(bInitialize);
 }
 
 //
-// Finalize
+// Выгружает библиотеку из памяти
+// Return: error
 //
-void fnFinalize(const FunctionCallbackInfo<Value>& args) {
+void fnFinalize(const FunctionCallbackInfo<Value>& args)
+{
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (bInitialize && pFunctionList != NULL_PTR) {
@@ -110,15 +106,13 @@ void fnFinalize(const FunctionCallbackInfo<Value>& args) {
 		}
 	}
 
-	if(rv == CKR_OK) {
-		args.GetReturnValue().Set(0);
-	} else {
-		args.GetReturnValue().Set(-(int)rv);
-	}
+	args.GetReturnValue().Set(-(int)rv);
 }
 
 //
 // Получает информацию о библиотеке
+// Используется функция: C_GetInfo
+// Return: error|object
 //
 void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
 {
@@ -126,24 +120,67 @@ void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
 
 	if (bInitialize && pFunctionList != NULL_PTR)
 	{
-		CK_INFO info;
-		rv = pFunctionList->C_GetInfo(&info);
+		rv = CKR_ARGUMENTS_BAD;
 
-		if (rv == CKR_OK)
+		if (args.Length() == 1)
 		{
 			Isolate* isolate = Isolate::GetCurrent();
 			HandleScope scope(isolate);
 
-			Local<Object> obj = Object::New(isolate);
+			Local<Function> callback = Local<Function>::Cast(args[0]);
+			Local<Object>   object   = Object::New(isolate);
 
-			obj->Set(_S(isolate, "cryptokiVersion"),    _V(isolate, info.cryptokiVersion));
-			obj->Set(_S(isolate, "manufacturerID"),     _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
-			obj->Set(_S(isolate, "flags"),              _I(isolate, info.flags));
-			obj->Set(_S(isolate, "libraryDescription"), _S(isolate, info.libraryDescription, STR_LEN(info.manufacturerID)));
-			obj->Set(_S(isolate, "libraryVersion"),     _V(isolate, info.libraryVersion));
+			CK_INFO info;
+			int slot = aSlots[(int)args[0]->NumberValue()];
 
-			args.GetReturnValue().Set(obj);
+			rv = pFunctionList->C_GetInfo(&info);
+			if (rv == CKR_OK)
+			{
+				object->Set(_S(isolate, "error"),              _I(isolate, -(int)rv));
+				object->Set(_S(isolate, "cryptokiVersion"),    _V(isolate, info.cryptokiVersion));
+				object->Set(_S(isolate, "manufacturerID"),     _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
+				object->Set(_S(isolate, "flags"),              _I(isolate, info.flags));
+				object->Set(_S(isolate, "libraryDescription"), _S(isolate, info.libraryDescription, STR_LEN(info.manufacturerID)));
+				object->Set(_S(isolate, "libraryVersion"),     _V(isolate, info.libraryVersion));
+
+				Local<Value> argv[1] = { object };
+				callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+				return;
+			}
+
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
 			return;
+		}
+	}
+    args.GetReturnValue().Set(-(int)rv);
+}
+
+//
+// Количество зарегистрированных слотов (подключенных токенов) в системе
+// Используется функция: C_GetSlotList
+// Init: aSlots
+// Return: error|int
+//
+void fnCountSlot(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = pFunctionList->C_GetSlotList(CK_TRUE, NULL_PTR, &ulSlotCount);
+		if (rv == CKR_OK)
+		{
+			aSlots = (CK_SLOT_ID*)malloc(ulSlotCount * sizeof(CK_SLOT_ID));
+			memset(aSlots, 0, (ulSlotCount * sizeof(CK_SLOT_ID)));
+
+			rv = pFunctionList->C_GetSlotList(CK_TRUE, aSlots, &ulSlotCount);
+			if (rv == CKR_OK)
+			{
+				args.GetReturnValue().Set((int)ulSlotCount);
+            	return;
+			}
 		}
 	}
 
@@ -152,195 +189,212 @@ void fnGetLibInfo(const FunctionCallbackInfo<Value>& args)
 }
 
 //
-// Количество зарегистрированных слотов (подключенных токенов) в системе
-// Используется функция: C_GetSlotList
-//
-void fnCountSlot(const FunctionCallbackInfo<Value>& args) {
-	rv = pFunctionList->C_GetSlotList(CK_TRUE, NULL_PTR, &ulSlotCount);
-
-	if (rv == CKR_OK) {
-		aSlots = (CK_SLOT_ID*)malloc(ulSlotCount * sizeof(CK_SLOT_ID));
-		memset(aSlots, 0, (ulSlotCount * sizeof(CK_SLOT_ID)));
-		rv = pFunctionList->C_GetSlotList(CK_TRUE, aSlots, &ulSlotCount);
-		if (rv == CKR_OK) {
-			args.GetReturnValue().Set((int)ulSlotCount);
-            return;
-		}
-	}
-
-    if(rv == CKR_OK) {
-		args.GetReturnValue().Set(0);
-	} else {
-		args.GetReturnValue().Set(-(int)rv);
-	}
-
-}
-
-//
 // Получить информацию из слота
 // Используется функция: C_GetSlotInfo
+// Return: error|callback(data)
 //
 void fnGetSlotInfo(const FunctionCallbackInfo<Value>& args)
 {
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
-	TryCatch trycatch(isolate);
-
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
-
-	//Exception::Error(_S(isolate, "Exception"));
-	//MessageCallback("Exception");
-	//trycatch.Exception();
 
 	if (bInitialize && pFunctionList != NULL_PTR)
 	{
+		rv = CKR_ARGUMENTS_BAD;
 
-		//CK_INFO info;
-		//rv = pFunctionList->C_GetInfo(&info);
+		if (args.Length() == 2)
+		{
+			rv = CKR_SLOT_ID_INVALID;
 
-		int slot = aSlots[(int)args[0]->NumberValue()];
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
 
-		// Callback
-		Local<Function> cb   = Local<Function>::Cast(args[1]);
+			Local<Function> callback = Local<Function>::Cast(args[1]);
+			Local<Object>   object   = Object::New(isolate);
 
-		Local<Object> obj = Object::New(isolate);
+			if (aSlots != NULL)
+			{
+				int arg0 = (int)args[0]->NumberValue();
+				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+				{
+					CK_SLOT_INFO info;
+					int slot = aSlots[(int)args[0]->NumberValue()];
 
-		rv = pFunctionList->C_GetSlotInfo(slot, &slotInfo);
+					rv = pFunctionList->C_GetSlotInfo(slot, &info);
+					if (rv == CKR_OK)
+					{
+						object->Set(_S(isolate, "error"),           _I(isolate, -(int)rv));
+						object->Set(_S(isolate, "description"),     _S(isolate, info.slotDescription, STR_LEN(info.slotDescription)));
+						object->Set(_S(isolate, "manufacturerID"),  _S(isolate, info.manufacturerID,  STR_LEN(info.manufacturerID)));
+						object->Set(_S(isolate, "flags"),           _I(isolate, (int)info.flags));
+						object->Set(_S(isolate, "hardwareVersion"), _V(isolate, info.hardwareVersion));
+						object->Set(_S(isolate, "firmwareVersion"), _V(isolate, info.firmwareVersion));
 
-		if (rv == CKR_OK) {
-			std::string str;
+						Local<Value> argv[1] = { object };
+						callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+						return;
+					}
+				}
+			}
 
-			obj->Set(_S(isolate, "description"),     _S(isolate, slotInfo.slotDescription, STR_LEN(slotInfo.slotDescription)));
-			obj->Set(_S(isolate, "manufacturerID"),  _S(isolate, slotInfo.manufacturerID,  STR_LEN(slotInfo.manufacturerID)));
-			obj->Set(_S(isolate, "flags"),           _I(isolate, (int)slotInfo.flags));
-			obj->Set(_S(isolate, "hardwareVersion"), _V(isolate, slotInfo.hardwareVersion));
-			obj->Set(_S(isolate, "firmwareVersion"), _V(isolate, slotInfo.firmwareVersion));
-
-			Local<Value> argv[1] = { obj };
-			cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
 		}
 	}
-
-    if (rv == CKR_OK) {
-        args.GetReturnValue().Set(0);
-    } else {
-        args.GetReturnValue().Set(-(int)rv);
-    }
-
+    args.GetReturnValue().Set(-(int)rv);
 }
 
 //
 // Получить информацию из токена
 // Используется функция: C_GetTokenInfo
+// Return: error|callback(data)
 //
-void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args) {
+void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
 
-	int slot = aSlots[(int)args[0]->NumberValue()];
+		if (args.Length() == 2)
+		{
+			rv = CKR_SLOT_ID_INVALID;
 
-	// Callback
-	Local<Function> cb   = Local<Function>::Cast(args[1]);
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
 
-	Local<Object> obj   = Object::New(isolate);
+			Local<Function> callback = Local<Function>::Cast(args[1]);
+			Local<Object>   object   = Object::New(isolate);
 
-	memset(&tokenInfo, 0, sizeof(CK_TOKEN_INFO));
-	rv = pFunctionList->C_GetTokenInfo(slot, &tokenInfo);
+			if (aSlots != NULL)
+			{
+				int arg0 = (int)args[0]->NumberValue();
+				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+				{
+					CK_TOKEN_INFO info;
+					int slot = aSlots[(int)args[0]->NumberValue()];
 
-	if (rv == CKR_OK) {
-		std::string str;
+					rv = pFunctionList->C_GetTokenInfo(slot, &info);
+					if (rv == CKR_OK)
+					{
+						object->Set(_S(isolate, "label"),              _S(isolate, info.label, STR_LEN(info.label)));
+						object->Set(_S(isolate, "manufacturerID"),     _S(isolate, info.manufacturerID, STR_LEN(info.manufacturerID)));
+						object->Set(_S(isolate, "model"),              _S(isolate, info.model, STR_LEN(info.model)));
+						object->Set(_S(isolate, "serialNumber"),       _S(isolate, info.serialNumber, STR_LEN(info.serialNumber)));
+						object->Set(_S(isolate, "flags"),              _I(isolate, (int)info.flags));
+						object->Set(_S(isolate, "maxSessionCount"),    _I(isolate, (int)info.ulMaxSessionCount));
+						object->Set(_S(isolate, "sessionCount"),       _I(isolate, (int)info.ulSessionCount));
+						object->Set(_S(isolate, "maxRwSessionCount"),  _I(isolate, (int)info.ulMaxRwSessionCount));
+						object->Set(_S(isolate, "rwSessionCount"),     _I(isolate, (int)info.ulRwSessionCount));
+						object->Set(_S(isolate, "maxPinLen"),          _I(isolate, (int)info.ulMaxPinLen));
+						object->Set(_S(isolate, "minPinLen"),          _I(isolate, (int)info.ulMinPinLen));
+						object->Set(_S(isolate, "totalPublicMemory"),  _I(isolate, (int)info.ulTotalPublicMemory));
+						object->Set(_S(isolate, "freePublicMemory"),   _I(isolate, (int)info.ulFreePublicMemory));
+						object->Set(_S(isolate, "totalPrivateMemory"), _I(isolate, (int)info.ulTotalPrivateMemory));
+						object->Set(_S(isolate, "freePrivateMemory"),  _I(isolate, (int)info.ulFreePrivateMemory));
+						object->Set(_S(isolate, "hardwareVersion"),    _V(isolate, info.hardwareVersion));
+						object->Set(_S(isolate, "firmwareVersion"),    _V(isolate, info.firmwareVersion));
+						object->Set(_S(isolate, "utcTime"),            _S(isolate, info.utcTime, STR_LEN(info.utcTime)));
 
-		obj->Set(_S(isolate, "label"),              _S(isolate, tokenInfo.label, STR_LEN(tokenInfo.label)));
-		obj->Set(_S(isolate, "manufacturerID"),     _S(isolate, tokenInfo.manufacturerID, STR_LEN(tokenInfo.manufacturerID)));
-		obj->Set(_S(isolate, "model"),              _S(isolate, tokenInfo.model, STR_LEN(tokenInfo.model)));
-		obj->Set(_S(isolate, "serialNumber"),       _S(isolate, tokenInfo.serialNumber, STR_LEN(tokenInfo.serialNumber)));
-		obj->Set(_S(isolate, "flags"),              _I(isolate, (int)tokenInfo.flags));
-		obj->Set(_S(isolate, "maxSessionCount"),    _I(isolate, (int)tokenInfo.ulMaxSessionCount));
-		obj->Set(_S(isolate, "sessionCount"),       _I(isolate, (int)tokenInfo.ulSessionCount));
-		obj->Set(_S(isolate, "maxRwSessionCount"),  _I(isolate, (int)tokenInfo.ulMaxRwSessionCount));
-		obj->Set(_S(isolate, "rwSessionCount"),     _I(isolate, (int)tokenInfo.ulRwSessionCount));
-		obj->Set(_S(isolate, "maxPinLen"),          _I(isolate, (int)tokenInfo.ulMaxPinLen));
-		obj->Set(_S(isolate, "minPinLen"),          _I(isolate, (int)tokenInfo.ulMinPinLen));
-		obj->Set(_S(isolate, "totalPublicMemory"),  _I(isolate, (int)tokenInfo.ulTotalPublicMemory));
-		obj->Set(_S(isolate, "freePublicMemory"),   _I(isolate, (int)tokenInfo.ulFreePublicMemory));
-		obj->Set(_S(isolate, "totalPrivateMemory"), _I(isolate, (int)tokenInfo.ulTotalPrivateMemory));
-		obj->Set(_S(isolate, "freePrivateMemory"),  _I(isolate, (int)tokenInfo.ulFreePrivateMemory));
-		obj->Set(_S(isolate, "hardwareVersion"),    _V(isolate, tokenInfo.hardwareVersion));
-		obj->Set(_S(isolate, "firmwareVersion"),    _V(isolate, tokenInfo.firmwareVersion));
-		obj->Set(_S(isolate, "utcTime"),            _S(isolate, tokenInfo.utcTime, STR_LEN(tokenInfo.utcTime)));
+						Local<Value> argv[1] = { object };
+						callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+						return;
+					}
+				}
+			}
 
-		Local<Value> argv[1] = { obj };
-		cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
+		}
 	}
-
-    if (rv == CKR_OK) {
-        args.GetReturnValue().Set(0);
-    } else {
-        args.GetReturnValue().Set(-(int)rv);
-    }
-
+    args.GetReturnValue().Set(-(int)rv);
 }
 
 //
 // Получить список доступных механизмов токена
 // Используется функция: C_GetMechanismList
 //
-void fnGetMechanismList(const FunctionCallbackInfo<Value>& args) {
+void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
 
-	int slot = aSlots[(int)args[0]->NumberValue()];
+		if (args.Length() == 2)
+		{
+			rv = CKR_SLOT_ID_INVALID;
 
-	// Callback
-	Local<Function> cb = Local<Function>::Cast(args[1]);
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
 
-	Local<Object> obj = Object::New(isolate);
+			Local<Function> callback = Local<Function>::Cast(args[1]);
+			Local<Object>   object   = Object::New(isolate);
 
-	ulMechanismCount = 0;
-	rv = pFunctionList->C_GetMechanismList(slot, NULL_PTR, &ulMechanismCount);
+			if (aSlots != NULL)
+			{
+				int arg0 = (int)args[0]->NumberValue();
+				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+				{
+					CK_MECHANISM_INFO     info;
+					CK_ULONG              ulMechanismCount = 0;
+					CK_MECHANISM_TYPE_PTR aMechanisms = NULL_PTR;
 
-	if(rv == CKR_OK) {
-		aMechanisms = (CK_MECHANISM_TYPE*)malloc(sizeof(CK_MECHANISM_TYPE) * ulMechanismCount);
-		memset(aMechanisms, 0, (sizeof(CK_MECHANISM_TYPE) * ulMechanismCount));
-		rv = pFunctionList->C_GetMechanismList(slot, aMechanisms, &ulMechanismCount);
-		if(rv == CKR_OK) {
-			Local<Array>  arr  = Array::New(isolate);
+					int slot = aSlots[(int)args[0]->NumberValue()];
 
-			obj->Set(_S(isolate, "count"), _I(isolate, (int)ulMechanismCount));
-			obj->Set(_S(isolate, "list"), arr);
+					rv = pFunctionList->C_GetMechanismList(slot, NULL_PTR, &ulMechanismCount);
 
-			for (i = 0; i < ulMechanismCount; i++) {
-				memset(&mechInfo, 0, sizeof(CK_MECHANISM_INFO));
-				rv = pFunctionList->C_GetMechanismInfo(slot, aMechanisms[i], &mechInfo);
-				if (rv == CKR_OK) {
-					Local<Object> objM = Object::New(isolate);
-					objM->Set(_S(isolate, "type"),	     _I(isolate, (int)aMechanisms[i]));
-					objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)mechInfo.ulMinKeySize));
-					objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)mechInfo.ulMaxKeySize));
-					objM->Set(_S(isolate, "flags"),	     _I(isolate, (int)mechInfo.flags));
-					arr->Set(i, objM);
-				} else {
-					break;
+					if(rv == CKR_OK)
+					{
+						aMechanisms = (CK_MECHANISM_TYPE*)malloc(sizeof(CK_MECHANISM_TYPE) * ulMechanismCount);
+						memset(aMechanisms, 0, (sizeof(CK_MECHANISM_TYPE) * ulMechanismCount));
+						rv = pFunctionList->C_GetMechanismList(slot, aMechanisms, &ulMechanismCount);
+
+						if(rv == CKR_OK)
+						{
+							Local<Array> arr = Array::New(isolate);
+
+							object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+							object->Set(_S(isolate, "count"), _I(isolate, (int)ulMechanismCount));
+							object->Set(_S(isolate, "list"), arr);
+
+							for (i = 0; i < ulMechanismCount; i++)
+							{
+								memset(&info, 0, sizeof(CK_MECHANISM_INFO));
+								rv = pFunctionList->C_GetMechanismInfo(slot, aMechanisms[i], &info);
+								if (rv == CKR_OK)
+								{
+									Local<Object> objM = Object::New(isolate);
+									objM->Set(_S(isolate, "type"),	     _I(isolate, (int)aMechanisms[i]));
+									objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)info.ulMinKeySize));
+									objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)info.ulMaxKeySize));
+									objM->Set(_S(isolate, "flags"),	     _I(isolate, (int)info.flags));
+									arr->Set(i, objM);
+								} else {
+									break;
+								}
+							}
+
+							Local<Value> argv[1] = { object };
+							callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+							return;
+						}
+					}
 				}
 			}
 
-			Local<Value> argv[1] = { obj };
-			cb->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
-			args.GetReturnValue().Set(obj);
-		} else {
-			// TODO
-
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
 		}
-	} else {
-		// TODO
-
 	}
-
+    args.GetReturnValue().Set(-(int)rv);
 }
 
 //
@@ -437,6 +491,7 @@ void fnRandom(const FunctionCallbackInfo<Value>& args) {
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
 	if (bInitialize && pFunctionList != NULL_PTR)
 	{
 		if (args.Length() == 3)
