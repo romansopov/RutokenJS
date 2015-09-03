@@ -52,6 +52,9 @@ if(isInitialize) {
 			rutoken.random(64, function(res){
 				console.log('Random: ', res);
 			});
+			rutoken.getObjectList(function(res){
+				console.log('getObjectList: ', res);
+			});
 		} else {
 			console.log('Login error: ' + CKR[rv]);
 		}

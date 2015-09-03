@@ -35,12 +35,48 @@ Local<String> _S(Isolate* isolate, const CK_UTF8CHAR_PTR value, int maxSize) {
 Local<Integer> _I(Isolate* isolate, int value) {
 	return Integer::New(isolate, value);
 }
-Local<Object> _V(Isolate* isolate, const CK_VERSION& version)
-{
+Local<Object> _V(Isolate* isolate, const CK_VERSION& version) {
 	Local<Object> ret = Object::New(isolate);
 	ret->Set(_S(isolate, "major"), _I(isolate, (int)version.major));
 	ret->Set(_S(isolate, "minor"), _I(isolate, (int)version.minor));
 	return ret;
+}
+
+CK_RV _GetObjectLabel(CK_OBJECT_HANDLE hObject, std::string* out)
+{
+	CK_ATTRIBUTE attr[] = {
+		{CKA_LABEL, NULL_PTR, 0}
+	};
+
+    std::string tmp;
+    rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    if(rv == CKR_OK && attr[0].ulValueLen)
+	{
+        tmp.resize(attr[0].ulValueLen);
+        attr[0].pValue = &tmp[0];
+        rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    }
+    out->swap(tmp);
+
+    return rv;
+}
+CK_RV _GetObjectID(CK_OBJECT_HANDLE hObject, std::string* out)
+{
+	CK_ATTRIBUTE attr[] = {
+		{CKA_ID, NULL_PTR, 0}
+	};
+
+    std::string tmp;
+    rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    if(rv == CKR_OK && attr[0].ulValueLen)
+	{
+        tmp.resize(attr[0].ulValueLen);
+        attr[0].pValue = &tmp[0];
+        rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    }
+    out->swap(tmp);
+
+    return rv;
 }
 
 //
@@ -317,6 +353,7 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args)
 //
 // Получить список доступных механизмов токена
 // Используется функция: C_GetMechanismList
+// Return: error|callback
 //
 void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 {
@@ -397,6 +434,83 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
     args.GetReturnValue().Set(-(int)rv);
 }
 
+//
+// Получает список объектов токена
+// Используются функции: C_FindObjectsInit, C_FindObjects, C_FindObjectsFinal
+// Return: error|callback
+//
+void fnGetObjectList(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
+
+		if (args.Length() == 1)
+		{
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
+
+			Local<Function> callback = Local<Function>::Cast(args[0]);
+			Local<Object>   object   = Object::New(isolate);
+
+			CK_ATTRIBUTE attr[] = {
+				{CKA_CLASS, &ocPubKey, sizeof(ocPubKey)}
+			};
+
+			rv = pFunctionList->C_FindObjectsInit(hSession, attr, arraysize(attr));
+			if(rv == CKR_OK)
+			{
+				CK_ULONG         count;
+				CK_OBJECT_HANDLE hPublicKey;
+
+				rv = pFunctionList->C_FindObjects(hSession, &hPublicKey, 1, &count);
+				if(rv == CKR_OK)
+				{
+					Local<Array> arr = Array::New(isolate);
+					i = 0;
+					while (rv == CKR_OK && count)
+					{
+						i++;
+						Local<Object> tmpObj = Object::New(isolate);
+
+						std::string label;
+            			rv = _GetObjectLabel(hPublicKey, &label);
+            			if(rv == CKR_OK) {
+							tmpObj->Set(_S(isolate, "label"), _S(isolate, label));
+            			}
+
+						std::string id;
+            			rv = _GetObjectID(hPublicKey, &id);
+            			if(rv == CKR_OK) {
+							tmpObj->Set(_S(isolate, "id"), _S(isolate, id));
+            			}
+
+						rv = pFunctionList->C_FindObjects(hSession, &hPublicKey, 1, &count);
+
+						arr->Set(i-1, tmpObj);
+					}
+
+					object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+					object->Set(_S(isolate, "count"), _I(isolate, i));
+					object->Set(_S(isolate, "list"), arr);
+
+					Local<Value> argv[1] = { object };
+					callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+					return;
+				}
+			}
+
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
+		}
+
+	}
+	args.GetReturnValue().Set(-(int)rv);
+}
 //
 // Функция открывает сессию и авторизует пользователя на токене.
 //
@@ -562,6 +676,7 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
 	NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
+	NODE_SET_METHOD(exports, "getObjectList",    fnGetObjectList);
 	NODE_SET_METHOD(exports, "login",            fnLogin);
 	NODE_SET_METHOD(exports, "random",           fnRandom);
 	NODE_SET_METHOD(exports, "initToken",        fnInitToken);
