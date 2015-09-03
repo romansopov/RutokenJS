@@ -33,7 +33,8 @@ if(isInitialize) {
 	if(cntSlot > 0) {
 
 		// !!! initToken
-		//console.log('initToken: ', CKR[rutoken.initToken(0, '87654321', 'Test')]);
+		// Для форматирования токена используется стандартный PIN администратора или PUK для Рутокен Web == 87654321
+		console.log('initToken: ', CKR[rutoken.initToken(1)]);
 		// !!! initToken
 
 		for(var i=0; i <= cntSlot-1; i++) {
@@ -43,14 +44,23 @@ if(isInitialize) {
 			rutoken.getTokenInfo(i, function(res) {
 				console.log('Token info #' + i + "\n", res);
 			});
-			rutoken.getMechanismList(i, function(data) {
-				console.log('Mechanism list #' + i + "\n", data);
+			rutoken.getMechanismList(i, function(res) {
+				console.log('Mechanism list #' + i + "\n");
+				if(res.count > 0) {
+					res.list.forEach(function(item) {
+						item.typeText = CKM[item.type];
+						console.log(item);
+					});
+				}
 			});
 		}
 
 		if((rv = rutoken.login(0, '12345678')) == CKR_OK) {
 			rutoken.random(64, function(res){
 				console.log('Random: ', res);
+			});
+			rutoken.getObjectList(function(res){
+				console.log('getObjectList: ', res);
 			});
 		} else {
 			console.log('Login error: ' + CKR[rv]);
