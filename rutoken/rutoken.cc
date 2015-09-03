@@ -12,9 +12,10 @@ using namespace v8;
 bool bInitialize = false; // Флаг инициализации библиотеки PKCS#11 fnInitialize()
 bool bLogin      = false; // Флаг аутентификации
 
-HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
-CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
-CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
+HMODULE				          hModule         = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
+CK_SESSION_HANDLE	          hSession        = NULL_PTR; // Хэндл открытой сессии
+CK_FUNCTION_LIST_PTR          pFunctionList   = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
+CK_FUNCTION_LIST_EXTENDED_PTR pFunctionExList = NULL_PTR;
 
 CK_SLOT_ID_PTR  aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
 CK_ULONG        ulSlotCount = 0;        // Количество идентификаторов всех доступных слотов в массиве
@@ -26,26 +27,56 @@ CK_RV rvTemp = CKR_OK; // Вспомогательная переменная д
 Local<String> _S(Isolate* isolate, const std::string& value) {
 	return String::NewFromUtf8(isolate, value.c_str());
 }
-
-Local<String> _S(Isolate* isolate, const char* value) {
-	return String::NewFromUtf8(isolate, value);
-}
-
 Local<String> _S(Isolate* isolate, const CK_UTF8CHAR_PTR value, int maxSize) {
 	int len = maxSize;
 	for (const char* p = (const char*)value + maxSize - 1; p >= (const char*)value && *p == 0x20; --p, --len) {}
 	return String::NewFromUtf8(isolate, (const char*)value, String::kNormalString, len);
 }
-
 Local<Integer> _I(Isolate* isolate, int value) {
 	return Integer::New(isolate, value);
 }
-Local<Object> _V(Isolate* isolate, const CK_VERSION& version)
-{
+Local<Object> _V(Isolate* isolate, const CK_VERSION& version) {
 	Local<Object> ret = Object::New(isolate);
 	ret->Set(_S(isolate, "major"), _I(isolate, (int)version.major));
 	ret->Set(_S(isolate, "minor"), _I(isolate, (int)version.minor));
 	return ret;
+}
+
+CK_RV _GetObjectLabel(CK_OBJECT_HANDLE hObject, std::string* out)
+{
+	CK_ATTRIBUTE attr[] = {
+		{CKA_LABEL, NULL_PTR, 0}
+	};
+
+    std::string tmp;
+    rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    if(rv == CKR_OK && attr[0].ulValueLen)
+	{
+        tmp.resize(attr[0].ulValueLen);
+        attr[0].pValue = &tmp[0];
+        rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+    }
+    out->swap(tmp);
+
+    return rv;
+}
+CK_RV _GetObjectID(CK_OBJECT_HANDLE hObject, std::string* out)
+{
+	CK_ATTRIBUTE attr[] = {
+		{CKA_ID, NULL_PTR, 0}
+	};
+
+	std::string tmp;
+	rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+	if (rv == CKR_OK && attr[0].ulValueLen)
+	{
+		tmp.resize(attr[0].ulValueLen);
+		attr[0].pValue = &tmp[0];
+		rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+	}
+	out->swap(tmp);
+
+	return rv;
 }
 
 CK_RV checkInit()
@@ -142,11 +173,13 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args)
 		if (hModule != NULL_PTR) {
 
 			// Указатель на функцию C_GetFunctionList
-			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
+			CK_C_GetFunctionList            pfGetFunctionList   = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
+			CK_C_EX_GetFunctionListExtended pfGetFunctionExList = (CK_C_EX_GetFunctionListExtended)GetProcAddress(hModule, "C_EX_GetFunctionListExtended");
 
 			// Шаг 3: Получить структуру с указателями на функции.
-			if (pfGetFunctionList != NULL_PTR) {
+			if (pfGetFunctionList != NULL_PTR && pfGetFunctionExList != NULL_PTR) {
 				rv = pfGetFunctionList(&pFunctionList);
+				rv = pfGetFunctionExList(&pFunctionExList);
 
 				// Шаг 4: Инициализировать библиотеку.
 				if (rv == CKR_OK) {
@@ -396,6 +429,7 @@ void fnGetTokenInfo(const FunctionCallbackInfo<Value>& args)
 //
 // Получить список доступных механизмов токена
 // Используется функция: C_GetMechanismList
+// Return: error|callback
 //
 void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 {
@@ -477,6 +511,83 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 }
 
 //
+// Получает список объектов токена
+// Используются функции: C_FindObjectsInit, C_FindObjects, C_FindObjectsFinal
+// Return: error|callback
+//
+void fnGetObjectList(const FunctionCallbackInfo<Value>& args)
+{
+	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
+
+	if (bInitialize && pFunctionList != NULL_PTR)
+	{
+		rv = CKR_ARGUMENTS_BAD;
+
+		if (args.Length() == 1)
+		{
+			Isolate* isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
+
+			Local<Function> callback = Local<Function>::Cast(args[0]);
+			Local<Object>   object   = Object::New(isolate);
+
+			CK_ATTRIBUTE attr[] = {
+				{CKA_CLASS, &ocPubKey, sizeof(ocPubKey)}
+			};
+
+			rv = pFunctionList->C_FindObjectsInit(hSession, attr, arraysize(attr));
+			if(rv == CKR_OK)
+			{
+				CK_ULONG         count;
+				CK_OBJECT_HANDLE hPublicKey;
+
+				rv = pFunctionList->C_FindObjects(hSession, &hPublicKey, 1, &count);
+				if(rv == CKR_OK)
+				{
+					Local<Array> arr = Array::New(isolate);
+					i = 0;
+					while (rv == CKR_OK && count)
+					{
+						i++;
+						Local<Object> tmpObj = Object::New(isolate);
+
+						std::string label;
+            			rv = _GetObjectLabel(hPublicKey, &label);
+            			if(rv == CKR_OK) {
+							tmpObj->Set(_S(isolate, "label"), _S(isolate, label));
+            			}
+
+						std::string id;
+            			rv = _GetObjectID(hPublicKey, &id);
+            			if(rv == CKR_OK) {
+							tmpObj->Set(_S(isolate, "id"), _S(isolate, id));
+            			}
+
+						rv = pFunctionList->C_FindObjects(hSession, &hPublicKey, 1, &count);
+
+						arr->Set(i-1, tmpObj);
+					}
+
+					object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+					object->Set(_S(isolate, "count"), _I(isolate, i));
+					object->Set(_S(isolate, "list"), arr);
+
+					Local<Value> argv[1] = { object };
+					callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+					return;
+				}
+			}
+
+			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+			Local<Value> argv[1] = { object };
+			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+			return;
+		}
+
+	}
+	args.GetReturnValue().Set(-(int)rv);
+}
+//
 // Функция открывает сессию и авторизует пользователя на токене.
 //
 void fnLogin(const FunctionCallbackInfo<Value>& args)
@@ -503,6 +614,11 @@ void fnLogin(const FunctionCallbackInfo<Value>& args)
 
 					if(rv == CKR_OK) {
 						rv = pFunctionList->C_Login(hSession, CKU_USER, (CK_UTF8CHAR_PTR)*pin, pin.length());
+						//rv = pFunctionList->C_Login(hSession, CKU_SO, (CK_UTF8CHAR_PTR)*pin, pin.length()); // Admin
+						if(rv == CKR_OK) {
+							// Возвращает CKR_USER_NOT_LOGGED_IN
+							//rv = pFunctionExList->C_EX_UnblockUserPIN(hSession);
+						}
 					}
 				}
 			}
@@ -576,8 +692,8 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 }
 
 //
-// Инициализирует память Рутокен
-// Используется функция: C_InitToken
+// Инициализирует память Рутокен со стандартными параметрами
+// Используется функция: C_EX_InitToken
 //
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
@@ -587,7 +703,7 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 	{
 		rv = CKR_ARGUMENTS_BAD;
 
-		if (args.Length() == 3)
+		if (args.Length() == 1)
 		{
 			rv = CKR_SLOT_ID_INVALID;
 
@@ -596,11 +712,27 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 				int arg0 = (int)args[0]->NumberValue();
 				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
 				{
-					int slot = aSlots[arg0];
-					String::Utf8Value pin(args[1]->ToString());
-					String::Utf8Value label(args[2]->ToString());
+					int    slot                      = aSlots[arg0];
+					static CK_CHAR     TOKEN_LABEL[] = {"RutokenJS"};
+					static CK_UTF8CHAR USER_PIN[]    = {'1', '2', '3', '4', '5', '6', '7', '8'};
+					static CK_UTF8CHAR ADMIN_PIN[]   = {'8', '7', '6', '5', '4', '3', '2', '1'};
 
-					rv = pFunctionList->C_InitToken(slot, (CK_UTF8CHAR_PTR)*pin, pin.length(), (CK_UTF8CHAR_PTR)*label);
+					CK_RUTOKEN_INIT_PARAM initInfo_st;
+					initInfo_st.ulSizeofThisStructure = sizeof(CK_RUTOKEN_INIT_PARAM);
+					initInfo_st.UseRepairMode         = 0;
+					initInfo_st.pNewAdminPin          = ADMIN_PIN;
+					initInfo_st.ulNewAdminPinLen      = sizeof(ADMIN_PIN);
+					initInfo_st.pNewUserPin           = USER_PIN;
+					initInfo_st.ulNewUserPinLen       = sizeof(USER_PIN);
+					initInfo_st.ulMinAdminPinLen      = 8;
+					initInfo_st.ulMinUserPinLen       = 8;
+					initInfo_st.ChangeUserPINPolicy   = (TOKEN_FLAGS_ADMIN_CHANGE_USER_PIN | TOKEN_FLAGS_USER_CHANGE_USER_PIN);
+					initInfo_st.ulMaxAdminRetryCount  = 10;
+					initInfo_st.ulMaxUserRetryCount   = 10;
+					initInfo_st.pTokenLabel           = TOKEN_LABEL;
+					initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
+
+					rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
 				}
 			}
 		}
@@ -778,6 +910,7 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "getSlotInfo",      fnGetSlotInfo);
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
 	NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
+	NODE_SET_METHOD(exports, "getObjectList",    fnGetObjectList);
 	NODE_SET_METHOD(exports, "random",           fnRandom);
 	NODE_SET_METHOD(exports, "initToken",        fnInitToken);
 	// sessions
