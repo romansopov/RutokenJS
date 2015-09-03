@@ -43,8 +43,14 @@ if(isInitialize) {
 			rutoken.getTokenInfo(i, function(res) {
 				console.log('Token info #' + i + "\n", res);
 			});
-			rutoken.getMechanismList(i, function(data) {
-				console.log('Mechanism list #' + i + "\n", data);
+			rutoken.getMechanismList(i, function(res) {
+				console.log('Mechanism list #' + i + "\n");
+				if(res.count > 0) {
+					res.list.forEach(function(item) {
+						item.typeText = CKM[item.type];
+						console.log(item);
+					});
+				}
 			});
 		}
 

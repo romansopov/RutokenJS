@@ -397,7 +397,7 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 							Local<Array> arr = Array::New(isolate);
 
 							object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-							object->Set(_S(isolate, "count"), _I(isolate, (int)ulMechanismCount));
+							object->Set(_S(isolate, "count"), _I(isolate, ulMechanismCount));
 							object->Set(_S(isolate, "list"), arr);
 
 							for (i = 0; i < ulMechanismCount; i++)
@@ -407,10 +407,10 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 								if (rv == CKR_OK)
 								{
 									Local<Object> objM = Object::New(isolate);
-									objM->Set(_S(isolate, "type"),	     _I(isolate, (int)aMechanisms[i]));
-									objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)info.ulMinKeySize));
-									objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)info.ulMaxKeySize));
-									objM->Set(_S(isolate, "flags"),	     _I(isolate, (int)info.flags));
+									objM->Set(_S(isolate, "type"),	     _I(isolate, aMechanisms[i]));
+									objM->Set(_S(isolate, "minKeySize"), _I(isolate, info.ulMinKeySize));
+									objM->Set(_S(isolate, "maxKeySize"), _I(isolate, info.ulMaxKeySize));
+									objM->Set(_S(isolate, "flags"),	     _I(isolate, info.flags));
 									arr->Set(i, objM);
 								} else {
 									break;
