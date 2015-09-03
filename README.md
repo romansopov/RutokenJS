@@ -34,4 +34,4 @@ nw-gyp build
 
 *error|callback* **random**(int size, function(data))
 
-*error* **initToken**(int slot, string pin, string label)
+*error* **initToken**(int slot)
