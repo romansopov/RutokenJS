@@ -28,6 +28,8 @@ nw-gyp build
 
 *error|callback* **getMechanismList**(int slot, function(data))
 
+*error|callback* **fnGetObjectList**(function(data))
+
 *error* **login**(int slot, string pin)
 
 *error|callback* **random**(int size, function(data))
