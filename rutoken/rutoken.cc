@@ -12,9 +12,10 @@ using namespace v8;
 bool bInitialize = false; // Флаг инициализации библиотеки PKCS#11 fnInitialize()
 bool bLogin      = false; // Флаг аутентификации
 
-HMODULE				 hModule	   = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
-CK_SESSION_HANDLE	 hSession      = NULL_PTR; // Хэндл открытой сессии
-CK_FUNCTION_LIST_PTR pFunctionList = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
+HMODULE				          hModule         = NULL_PTR; // Хэндл загруженной библиотеки PKCS#11
+CK_SESSION_HANDLE	          hSession        = NULL_PTR; // Хэндл открытой сессии
+CK_FUNCTION_LIST_PTR          pFunctionList   = NULL_PTR; // Указатель на список функций PKCS#11, хранящийся в структуре CK_FUNCTION_LIST
+CK_FUNCTION_LIST_EXTENDED_PTR pFunctionExList = NULL_PTR;
 
 CK_SLOT_ID_PTR  aSlots      = NULL_PTR; // Указатель на массив идентификаторов всех доступных слотов
 CK_ULONG        ulSlotCount = 0;        // Количество идентификаторов всех доступных слотов в массиве
@@ -60,11 +61,13 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args)
 		if (hModule != NULL_PTR) {
 
 			// Указатель на функцию C_GetFunctionList
-			CK_C_GetFunctionList pfGetFunctionList = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
+			CK_C_GetFunctionList            pfGetFunctionList   = (CK_C_GetFunctionList)GetProcAddress(hModule, "C_GetFunctionList");
+			CK_C_EX_GetFunctionListExtended pfGetFunctionExList = (CK_C_EX_GetFunctionListExtended)GetProcAddress(hModule, "C_EX_GetFunctionListExtended");
 
 			// Шаг 3: Получить структуру с указателями на функции.
-			if (pfGetFunctionList != NULL_PTR) {
+			if (pfGetFunctionList != NULL_PTR && pfGetFunctionExList != NULL_PTR) {
 				rv = pfGetFunctionList(&pFunctionList);
+				rv = pfGetFunctionExList(&pFunctionExList);
 
 				// Шаг 4: Инициализировать библиотеку.
 				if (rv == CKR_OK) {
@@ -421,6 +424,11 @@ void fnLogin(const FunctionCallbackInfo<Value>& args)
 
 					if(rv == CKR_OK) {
 						rv = pFunctionList->C_Login(hSession, CKU_USER, (CK_UTF8CHAR_PTR)*pin, pin.length());
+						//rv = pFunctionList->C_Login(hSession, CKU_SO, (CK_UTF8CHAR_PTR)*pin, pin.length()); // Admin
+						if(rv == CKR_OK) {
+							// Возвращает CKR_USER_NOT_LOGGED_IN
+							//rv = pFunctionExList->C_EX_UnblockUserPIN(hSession);
+						}
 					}
 				}
 			}
@@ -494,8 +502,8 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 }
 
 //
-// Инициализирует память Рутокен
-// Используется функция: C_InitToken
+// Инициализирует память Рутокен со стандартными параметрами
+// Используется функция: C_EX_InitToken
 //
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
@@ -505,7 +513,7 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 	{
 		rv = CKR_ARGUMENTS_BAD;
 
-		if (args.Length() == 3)
+		if (args.Length() == 1)
 		{
 			rv = CKR_SLOT_ID_INVALID;
 
@@ -514,11 +522,27 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 				int arg0 = (int)args[0]->NumberValue();
 				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
 				{
-					int slot = aSlots[arg0];
-					String::Utf8Value pin(args[1]->ToString());
-					String::Utf8Value label(args[2]->ToString());
+					int    slot                      = aSlots[arg0];
+					static CK_CHAR     TOKEN_LABEL[] = {"RutokenJS"};
+					static CK_UTF8CHAR USER_PIN[]    = {'1', '2', '3', '4', '5', '6', '7', '8'};
+					static CK_UTF8CHAR ADMIN_PIN[]   = {'8', '7', '6', '5', '4', '3', '2', '1'};
 
-					rv = pFunctionList->C_InitToken(slot, (CK_UTF8CHAR_PTR)*pin, pin.length(), (CK_UTF8CHAR_PTR)*label);
+					CK_RUTOKEN_INIT_PARAM initInfo_st;
+					initInfo_st.ulSizeofThisStructure = sizeof(CK_RUTOKEN_INIT_PARAM);
+					initInfo_st.UseRepairMode         = 0;
+					initInfo_st.pNewAdminPin          = ADMIN_PIN;
+					initInfo_st.ulNewAdminPinLen      = sizeof(ADMIN_PIN);
+					initInfo_st.pNewUserPin           = USER_PIN;
+					initInfo_st.ulNewUserPinLen       = sizeof(USER_PIN);
+					initInfo_st.ulMinAdminPinLen      = 8;
+					initInfo_st.ulMinUserPinLen       = 8;
+					initInfo_st.ChangeUserPINPolicy   = (TOKEN_FLAGS_ADMIN_CHANGE_USER_PIN | TOKEN_FLAGS_USER_CHANGE_USER_PIN);
+					initInfo_st.ulMaxAdminRetryCount  = 10;
+					initInfo_st.ulMaxUserRetryCount   = 10;
+					initInfo_st.pTokenLabel           = TOKEN_LABEL;
+					initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
+
+					rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
 				}
 			}
 		}
