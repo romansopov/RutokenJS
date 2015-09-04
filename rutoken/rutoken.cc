@@ -2,8 +2,8 @@
 #include <node_buffer.h>
 #include <v8.h>
 #include <Common.h>
-#include <eh.h>
-#include <thread>
+#include <uv.h>
+//#include <thread>
 #include <string>
 #include <config.h> // #define PKCS11ECP_LIBRARY_PATH для локального использования и добавлен в .gitignore
 
@@ -697,6 +697,31 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 // Инициализирует память Рутокен со стандартными параметрами
 // Используется функция: C_EX_InitToken
 //
+/*
+struct stInitToken
+{
+    int result;
+	int slot;
+    Persistent<Object> callback;
+};
+void thInitTokenWorker(uv_work_t* req)
+{
+
+}
+void thInitTokenAfter(uv_work_t* req, int status)
+{
+	Isolate* isolate = Isolate::GetCurrent();
+
+	stInitToken* request = (stInitToken*)req->data;
+	delete req;
+
+	Handle<Value> argv[2];
+	argv[0] = Integer::New(isolate, request->result);
+
+	//request->callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+
+}
+*/
 void thInitToken(Isolate* isolate, const FunctionCallbackInfo<Value>& args)
 {
 	rv = CKR_SLOT_ID_INVALID;
@@ -740,6 +765,9 @@ void thInitToken(Isolate* isolate, const FunctionCallbackInfo<Value>& args)
 }
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
+	Isolate* isolate = Isolate::GetCurrent();
+	HandleScope scope(isolate);
+
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (bInitialize && pFunctionList != NULL_PTR)
@@ -748,7 +776,32 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 
 		if (args.Length() == 2)
 		{
-			Isolate* isolate = Isolate::GetCurrent();
+			rv = CKR_SLOT_ID_INVALID;
+
+			if (aSlots != NULL)
+			{
+				int arg0 = (int)args[0]->NumberValue();
+				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+				{
+					/*
+					int slot = aSlots[arg0];
+					Local<Function>      callback = Local<Function>::Cast(args[1]);
+					Persistent<Object> prCallback(isolate, args[1]);
+
+					//Persistent<Function, CopyablePersistentTraits<Function>> f(isolate, callback);
+
+					stInitToken* request = new stInitToken();
+					request->callback = prCallback;
+					request->slot     = slot;
+
+					uv_work_t* req = new uv_work_t();
+					req->data = request;
+					uv_queue_work(uv_default_loop(), req, thInitTokenWorker, thInitTokenAfter);
+					*/
+				}
+			}
+
+			//Isolate* isolate = Isolate::GetCurrent();
 			thInitToken(isolate, args);
 			// Попытка запустить в отдельном потоке приводит к падению приложения... (((
 			//std::thread thr(thInitToken, isolate, args);
