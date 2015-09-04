@@ -1,0 +1,93 @@
+<html>
+<head>
+<title>Test Sessions</title>
+</head>
+<body>
+<script type="text/javascript" src="const.js"></script>
+<script type="text/javascript">
+
+var rutoken = require('./rutoken/build/Release/rutoken');
+var gui     = require('nw.gui');
+var fs      = require('fs');
+
+console.log('initialize() ',  CKR[rutoken.initialize()]);
+
+var isInitialize = rutoken.isInitialize();
+console.log('isInitialize() ', isInitialize);
+
+if(isInitialize)
+{
+	var cntSlot = rutoken.countSlot();
+	console.log('cntSlot: ', cntSlot);
+
+	if(cntSlot > 0)
+	{
+		hSession = rutoken.openSession(0);
+		if(hSession <= 0)
+			console.log('openSession(0) ', hSession == 0 ? 'null' : CKR[hSession]);
+		else
+		{
+			console.log('openSession(0) handle ', hSession);
+			
+			info = rutoken.getSessionInfo(hSession);
+			console.log('getSessionInfo after open ', isNaN(info) ? info : CKR[info]);
+			
+			operState = rutoken.getOperationState(hSession);
+			console.log('getOperationState ', isNaN(operState) ? operState : CKR[operState]);
+			if(Array.isArray(operState))
+			{
+				rv = rutoken.setOperationState(operState, 0, 0, hSession);
+				console.log('setOperationState ', rv);
+			}
+			
+			rv = rutoken.closeSession(hSession);
+			console.log('closeSession(' + hSession + ') ', CKR[rv]);
+			
+			info = rutoken.getSessionInfo(hSession);
+			console.log('getSessionInfo after close ', isNaN(info) ? info : CKR[info]);
+		}
+		
+		hSession1 = rutoken.openSession(0);
+		hSession2 = rutoken.openSession(0);
+		if(hSession1 < 0)
+			console.log('openSession1(0) ', CKR[hSession1]);
+		if(hSession2 < 0)
+			console.log('openSession2(0) ', CKR[hSession2]);
+		if(hSession1 > 0 && hSession2 > 0)
+		{
+			console.log('openSession(0) handle1 ', hSession1);
+			console.log('openSession(0) handle2 ', hSession2);
+			
+			info = rutoken.getSessionInfo(hSession1);
+			console.log('getSessionInfo1 after open ', isNaN(info) ? info : CKR[info]);
+			info = rutoken.getSessionInfo(hSession2);
+			console.log('getSessionInfo2 after open ', isNaN(info) ? info : CKR[info]);
+			
+			rv = rutoken.closeAllSessions(0);
+			console.log('closeAllSession(0) ', CKR[rv]);
+			
+			info = rutoken.getSessionInfo(hSession1);
+			console.log('getSessionInfo1 after all close ', (isNaN(info) ? info : CKR[info]));
+			info = rutoken.getSessionInfo(hSession2);
+			console.log('getSessionInfo2 after all close ', (isNaN(info) ? info : CKR[info]));
+		}
+
+		rv = rutoken.login(0, '2318');
+		console.log('wrong login ', CKR[rv]);
+		
+		rv = rutoken.login(0, '2317');
+		console.log('login ', CKR[rv]);
+		if(rv == CKR_OK)
+		{
+			rv = rutoken.logout()
+			console.log('logout ', CKR[rv]);
+		}
+	}
+
+	console.log('finalize() ', CKR[rutoken.finalize()]);
+}
+
+console.log('End');
+</script>
+</body>
+</html>

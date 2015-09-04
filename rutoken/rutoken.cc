@@ -66,17 +66,93 @@ CK_RV _GetObjectID(CK_OBJECT_HANDLE hObject, std::string* out)
 		{CKA_ID, NULL_PTR, 0}
 	};
 
-    std::string tmp;
-    rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
-    if(rv == CKR_OK && attr[0].ulValueLen)
+	std::string tmp;
+	rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+	if (rv == CKR_OK && attr[0].ulValueLen)
 	{
-        tmp.resize(attr[0].ulValueLen);
-        attr[0].pValue = &tmp[0];
-        rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
-    }
-    out->swap(tmp);
+		tmp.resize(attr[0].ulValueLen);
+		attr[0].pValue = &tmp[0];
+		rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
+	}
+	out->swap(tmp);
 
-    return rv;
+	return rv;
+}
+
+CK_RV checkInit()
+{
+	return bInitialize && pFunctionList != NULL_PTR ? CKR_OK : CKR_CRYPTOKI_NOT_INITIALIZED;
+}
+
+CK_RV checkArgs(const FunctionCallbackInfo<Value>& args, int requiredArgsLength)
+{
+	return args.Length() >= requiredArgsLength ? CKR_OK : CKR_ARGUMENTS_BAD;
+}
+
+CK_RV checkInitAndArgs(const FunctionCallbackInfo<Value>& args, int requiredArgsLength)
+{
+	CK_RV ret = checkInit();
+	if (ret == CKR_OK)
+		ret = checkArgs(args, requiredArgsLength);
+	return ret;
+}
+
+CK_RV checkGetSlot(const FunctionCallbackInfo<Value>& args, int requiredArgsLength, int slotIdParamIndex, int* slotId)
+{
+	*slotId = 0;
+	CK_RV ret = checkInitAndArgs(args, requiredArgsLength);
+
+	if (ret == CKR_OK)
+	{
+		rv = CKR_SLOT_ID_INVALID;
+
+		if (aSlots != NULL && slotIdParamIndex < requiredArgsLength)
+		{
+			Handle<Value> val = args[slotIdParamIndex];
+			if (val->IsInt32())
+			{
+				int argSlotId = (int)val->ToInt32()->Int32Value();
+				if (argSlotId >= 0 && argSlotId < (int)ulSlotCount)
+				{
+					*slotId = aSlots[argSlotId];
+					ret = CKR_OK;
+				}
+			}
+		}
+	}
+
+	return ret;
+}
+
+CK_RV checkGetSessionHandle(const FunctionCallbackInfo<Value>& args, int requiredArgsLength, int sessionHandleParamIndex, CK_SESSION_HANDLE_PTR sessionHandle)
+{
+	*sessionHandle = NULL;
+	CK_RV ret = checkInitAndArgs(args, requiredArgsLength);
+
+	if (ret == CKR_OK)
+	{
+		rv = CKR_SESSION_HANDLE_INVALID;
+
+		if (sessionHandleParamIndex >= 0 && sessionHandleParamIndex < args.Length())
+		{
+			Handle<Value> val = args[sessionHandleParamIndex];
+			if (val->IsNumber())
+			{
+				*sessionHandle = (CK_SESSION_HANDLE)val->IntegerValue();
+				if (*sessionHandle != NULL)
+					ret = CKR_OK;
+			}
+			else
+				ret = CKR_ARGUMENTS_BAD;
+		}
+		else if (hSession != NULL)
+		{
+			*sessionHandle = hSession;
+			ret = CKR_OK;
+		}
+	}
+
+	return ret;
 }
 
 //
@@ -397,7 +473,7 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 							Local<Array> arr = Array::New(isolate);
 
 							object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-							object->Set(_S(isolate, "count"), _I(isolate, ulMechanismCount));
+							object->Set(_S(isolate, "count"), _I(isolate, (int)ulMechanismCount));
 							object->Set(_S(isolate, "list"), arr);
 
 							for (i = 0; i < ulMechanismCount; i++)
@@ -407,10 +483,10 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 								if (rv == CKR_OK)
 								{
 									Local<Object> objM = Object::New(isolate);
-									objM->Set(_S(isolate, "type"),	     _I(isolate, aMechanisms[i]));
-									objM->Set(_S(isolate, "minKeySize"), _I(isolate, info.ulMinKeySize));
-									objM->Set(_S(isolate, "maxKeySize"), _I(isolate, info.ulMaxKeySize));
-									objM->Set(_S(isolate, "flags"),	     _I(isolate, info.flags));
+									objM->Set(_S(isolate, "type"),	     _I(isolate, (int)aMechanisms[i]));
+									objM->Set(_S(isolate, "minKeySize"), _I(isolate, (int)info.ulMinKeySize));
+									objM->Set(_S(isolate, "maxKeySize"), _I(isolate, (int)info.ulMaxKeySize));
+									objM->Set(_S(isolate, "flags"),	     _I(isolate, (int)info.flags));
 									arr->Set(i, objM);
 								} else {
 									break;
@@ -664,6 +740,164 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 	args.GetReturnValue().Set(-(int)rv);
 }
 
+// 
+// Открывает новую сессию с Рутокен
+// 
+void fnOpenSession(const FunctionCallbackInfo<Value>& args)
+{
+	int slotId = 0;
+	CK_RV ret = checkGetSlot(args, 1, 0, &slotId);
+	if (ret == CKR_OK)
+	{
+		CK_SESSION_HANDLE handle = NULL;
+		ret = pFunctionList->C_OpenSession(slotId, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &handle);
+
+		if (ret == CKR_OK)
+		{
+			args.GetReturnValue().Set((unsigned int)handle);
+			return;
+		}
+	}
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+// 
+// Закрывает сессию с Рутокен
+//
+void fnCloseSession(const FunctionCallbackInfo<Value>& args)
+{
+	CK_SESSION_HANDLE handle = NULL;
+	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
+	if (ret == CKR_OK)
+		ret = pFunctionList->C_CloseSession(handle);
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+//
+// Закрывает все сессии
+//
+void fnCloseAllSessions(const FunctionCallbackInfo<Value>& args)
+{
+	int slotId = 0;
+	CK_RV ret = checkGetSlot(args, 1, 0, &slotId);
+	if (ret == CKR_OK)
+		ret = pFunctionList->C_CloseAllSessions(slotId);
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+//
+// Получает информацию о конкретной сессии
+//
+void fnGetSessionInfo(const FunctionCallbackInfo<Value>& args)
+{
+	CK_SESSION_HANDLE handle = NULL;
+	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
+	if (ret == CKR_OK)
+	{
+		CK_SESSION_INFO info;
+		ret = pFunctionList->C_GetSessionInfo(handle, &info);
+		if (ret == CKR_OK)
+		{
+			Isolate*    isolate = Isolate::GetCurrent();
+			HandleScope scope(isolate);
+			Local<Object>   object = Object::New(isolate);
+			object->Set(_S(isolate, "slotId"      ), _I(isolate, info.slotID       ));
+			object->Set(_S(isolate, "state"       ), _I(isolate, info.state        ));
+			object->Set(_S(isolate, "flags"       ), _I(isolate, info.flags        ));
+			object->Set(_S(isolate, "deviceError" ), _I(isolate, info.ulDeviceError));
+			args.GetReturnValue().Set(object);
+			return;
+		}
+	}
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+//
+// Получает информацию о состоянии выполнения криптографической операции
+//
+void fnGetOperationState(const FunctionCallbackInfo<Value>& args)
+{
+	CK_SESSION_HANDLE handle = NULL;
+	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
+	if (ret == CKR_OK)
+	{
+		CK_ULONG operStateLen = 0;
+		ret = pFunctionList->C_GetOperationState(handle, NULL, &operStateLen);
+		if (ret == CKR_OK && operStateLen > 0)
+		{
+			CK_BYTE_PTR pState = new CK_BYTE[operStateLen];
+			ret = pFunctionList->C_GetOperationState(handle, pState, &operStateLen);
+			if (ret == CKR_OK)
+			{
+				Isolate*    isolate = Isolate::GetCurrent();
+				HandleScope scope(isolate);
+				Local<Array> arr = Array::New(isolate, operStateLen);
+				for (CK_ULONG i = 0; i < operStateLen; ++i)
+					arr->Set(i, _I(isolate, pState[i]));
+				args.GetReturnValue().Set(arr);
+				return;
+			}
+
+			delete[] pState;
+		}
+	}
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+//
+// Изменяет состояние выполнения криптографической операции
+//
+void fnSetOperationState(const FunctionCallbackInfo<Value>& args)
+{
+	CK_SESSION_HANDLE handle = NULL;
+	CK_RV ret = checkGetSessionHandle(args, 3, 3, &handle);
+	if (ret == CKR_OK)
+	{
+		if (args[0]->IsArray() && args[1]->IsInt32() && args[2]->Int32Value())
+		{
+			Handle<Array> arg0 = Handle<Array>::Cast(args[0]);
+			CK_ULONG operStateLen = arg0->Length();
+			if (operStateLen > 0)
+			{
+				CK_OBJECT_HANDLE hEncryptionKey     = (CK_ULONG)args[1]->IntegerValue();
+				CK_OBJECT_HANDLE hAuthenticationKey = (CK_ULONG)args[2]->IntegerValue();
+
+				CK_BYTE_PTR pState = new CK_BYTE[operStateLen];
+				for (CK_ULONG i = 0; i < operStateLen; ++i)
+					pState[i] = (CK_BYTE)arg0->Get(i)->NumberValue();
+
+				ret = pFunctionList->C_SetOperationState(handle, pState, operStateLen, hEncryptionKey, hAuthenticationKey);
+
+				delete pState;
+			}
+			else
+				ret = CKR_ARGUMENTS_BAD;
+		}
+		else
+			ret = CKR_ARGUMENTS_BAD;
+	}
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
+//
+// Выполняет выход пользователя / администратора
+//
+void fnLogout(const FunctionCallbackInfo<Value>& args)
+{
+	CK_SESSION_HANDLE handle = NULL;
+	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
+	if (ret == CKR_OK)
+		ret = pFunctionList->C_Logout(handle);
+
+	args.GetReturnValue().Set(-(int)ret);
+}
+
 //
 // Инициализация функций и модуля
 //
@@ -677,8 +911,16 @@ void init(Handle<Object> exports) {
 	NODE_SET_METHOD(exports, "getTokenInfo",     fnGetTokenInfo);
 	NODE_SET_METHOD(exports, "getMechanismList", fnGetMechanismList);
 	NODE_SET_METHOD(exports, "getObjectList",    fnGetObjectList);
-	NODE_SET_METHOD(exports, "login",            fnLogin);
 	NODE_SET_METHOD(exports, "random",           fnRandom);
 	NODE_SET_METHOD(exports, "initToken",        fnInitToken);
+	// sessions
+	NODE_SET_METHOD(exports, "openSession"      , fnOpenSession);
+	NODE_SET_METHOD(exports, "closeSession"     , fnCloseSession);
+	NODE_SET_METHOD(exports, "closeAllSessions" , fnCloseAllSessions);
+	NODE_SET_METHOD(exports, "getSessionInfo"   , fnGetSessionInfo);
+	NODE_SET_METHOD(exports, "setOperationState", fnSetOperationState);
+	NODE_SET_METHOD(exports, "getOperationState", fnGetOperationState);
+	NODE_SET_METHOD(exports, "login"            , fnLogin);
+	NODE_SET_METHOD(exports, "logout"           , fnLogout);
 }
 NODE_MODULE(rutoken, init);
