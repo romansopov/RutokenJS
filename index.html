@@ -34,7 +34,18 @@ if(isInitialize) {
 
 		// !!! initToken
 		// Для форматирования токена используется стандартный PIN администратора или PUK для Рутокен Web == 87654321
-		console.log('initToken: ', CKR[rutoken.initToken(1)]);
+		/*
+		console.log('initToken: start');
+		var rv = rutoken.initToken(0, function(data) {
+			if(data.error == CKR_OK) {
+				console.log('initToken: true');
+			} else {
+				console.log('initToken: false');
+			}
+			console.log('initToken: end');
+		});
+		console.log(CKR[rv]);
+		*/
 		// !!! initToken
 
 		for(var i=0; i <= cntSlot-1; i++) {

@@ -2,6 +2,8 @@
 #include <node_buffer.h>
 #include <v8.h>
 #include <Common.h>
+#include <eh.h>
+#include <thread>
 #include <string>
 #include <config.h> // #define PKCS11ECP_LIBRARY_PATH для локального использования и добавлен в .gitignore
 
@@ -695,9 +697,49 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 // Инициализирует память Рутокен со стандартными параметрами
 // Используется функция: C_EX_InitToken
 //
-void thInitToken(CK_SLOT_ID slot, CK_UTF8CHAR ADMIN_PIN[8], CK_RUTOKEN_INIT_PARAM* initInfo_st)
+void thInitToken(const FunctionCallbackInfo<Value>& args)
 {
-	rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), initInfo_st);
+	rv = CKR_SLOT_ID_INVALID;
+
+	Isolate* isolate = Isolate::GetCurrent();
+	HandleScope scope(isolate);
+
+	Local<Function> callback = Local<Function>::Cast(args[1]);
+	Local<Object>   object   = Object::New(isolate);
+
+	if (aSlots != NULL)
+	{
+		int arg0 = (int)args[0]->NumberValue();
+		if (arg0 >= 0 && arg0 < (int)ulSlotCount)
+		{
+			int    slot                      = aSlots[arg0];
+			static CK_CHAR     TOKEN_LABEL[] = {"RutokenJS"};
+			static CK_UTF8CHAR USER_PIN[]    = {'1', '2', '3', '4', '5', '6', '7', '8'};
+			static CK_UTF8CHAR ADMIN_PIN[]   = {'8', '7', '6', '5', '4', '3', '2', '1'};
+
+			CK_RUTOKEN_INIT_PARAM initInfo_st;
+			initInfo_st.ulSizeofThisStructure = sizeof(CK_RUTOKEN_INIT_PARAM);
+			initInfo_st.UseRepairMode         = 0;
+			initInfo_st.pNewAdminPin          = ADMIN_PIN;
+			initInfo_st.ulNewAdminPinLen      = sizeof(ADMIN_PIN);
+			initInfo_st.pNewUserPin           = USER_PIN;
+			initInfo_st.ulNewUserPinLen       = sizeof(USER_PIN);
+			initInfo_st.ulMinAdminPinLen      = 8;
+			initInfo_st.ulMinUserPinLen       = 8;
+			initInfo_st.ChangeUserPINPolicy   = (TOKEN_FLAGS_ADMIN_CHANGE_USER_PIN | TOKEN_FLAGS_USER_CHANGE_USER_PIN);
+			initInfo_st.ulMaxAdminRetryCount  = 10;
+			initInfo_st.ulMaxUserRetryCount   = 10;
+			initInfo_st.pTokenLabel           = TOKEN_LABEL;
+			initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
+
+			rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
+		}
+	}
+
+	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+	Local<Value> argv[1] = { object };
+	callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+	return;
 }
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
@@ -707,47 +749,20 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 	{
 		rv = CKR_ARGUMENTS_BAD;
 
-		if (args.Length() == 1)
+		if (args.Length() == 2)
 		{
-			rv = CKR_SLOT_ID_INVALID;
-
-			if (aSlots != NULL)
-			{
-				int arg0 = (int)args[0]->NumberValue();
-				if (arg0 >= 0 && arg0 < (int)ulSlotCount)
-				{
-					int    slot                      = aSlots[arg0];
-					static CK_CHAR     TOKEN_LABEL[] = {"RutokenJS"};
-					static CK_UTF8CHAR USER_PIN[]    = {'1', '2', '3', '4', '5', '6', '7', '8'};
-					static CK_UTF8CHAR ADMIN_PIN[]   = {'8', '7', '6', '5', '4', '3', '2', '1'};
-
-					CK_RUTOKEN_INIT_PARAM initInfo_st;
-					initInfo_st.ulSizeofThisStructure = sizeof(CK_RUTOKEN_INIT_PARAM);
-					initInfo_st.UseRepairMode         = 0;
-					initInfo_st.pNewAdminPin          = ADMIN_PIN;
-					initInfo_st.ulNewAdminPinLen      = sizeof(ADMIN_PIN);
-					initInfo_st.pNewUserPin           = USER_PIN;
-					initInfo_st.ulNewUserPinLen       = sizeof(USER_PIN);
-					initInfo_st.ulMinAdminPinLen      = 8;
-					initInfo_st.ulMinUserPinLen       = 8;
-					initInfo_st.ChangeUserPINPolicy   = (TOKEN_FLAGS_ADMIN_CHANGE_USER_PIN | TOKEN_FLAGS_USER_CHANGE_USER_PIN);
-					initInfo_st.ulMaxAdminRetryCount  = 10;
-					initInfo_st.ulMaxUserRetryCount   = 10;
-					initInfo_st.pTokenLabel           = TOKEN_LABEL;
-					initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
-
-					rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
-					//thInitToken(slot, ADMIN_PIN, &initInfo_st);
-				}
-			}
+			thInitToken(args);
+			// Попытка запустить в отдельном потоке приводит к падению приложения... (((
+			//std::thread thr(thInitToken, args);
+			//thr.detach();
 		}
 	}
 	args.GetReturnValue().Set(-(int)rv);
 }
 
-// 
+//
 // Открывает новую сессию с Рутокен
-// 
+//
 void fnOpenSession(const FunctionCallbackInfo<Value>& args)
 {
 	int slotId = 0;
@@ -767,7 +782,7 @@ void fnOpenSession(const FunctionCallbackInfo<Value>& args)
 	args.GetReturnValue().Set(-(int)ret);
 }
 
-// 
+//
 // Закрывает сессию с Рутокен
 //
 void fnCloseSession(const FunctionCallbackInfo<Value>& args)
