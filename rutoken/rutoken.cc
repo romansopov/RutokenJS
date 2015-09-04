@@ -695,6 +695,10 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 // Инициализирует память Рутокен со стандартными параметрами
 // Используется функция: C_EX_InitToken
 //
+void thInitToken(CK_SLOT_ID slot, CK_UTF8CHAR ADMIN_PIN[8], CK_RUTOKEN_INIT_PARAM* initInfo_st)
+{
+	rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), initInfo_st);
+}
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -733,6 +737,7 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 					initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
 
 					rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
+					//thInitToken(slot, ADMIN_PIN, &initInfo_st);
 				}
 			}
 		}
@@ -897,6 +902,10 @@ void fnLogout(const FunctionCallbackInfo<Value>& args)
 
 	args.GetReturnValue().Set(-(int)ret);
 }
+
+//
+//
+//
 
 //
 // Инициализация функций и модуля
