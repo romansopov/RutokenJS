@@ -697,12 +697,9 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 // Инициализирует память Рутокен со стандартными параметрами
 // Используется функция: C_EX_InitToken
 //
-void thInitToken(const FunctionCallbackInfo<Value>& args)
+void thInitToken(Isolate* isolate, const FunctionCallbackInfo<Value>& args)
 {
 	rv = CKR_SLOT_ID_INVALID;
-
-	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
 
 	Local<Function> callback = Local<Function>::Cast(args[1]);
 	Local<Object>   object   = Object::New(isolate);
@@ -751,9 +748,10 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 
 		if (args.Length() == 2)
 		{
-			thInitToken(args);
+			Isolate* isolate = Isolate::GetCurrent();
+			thInitToken(isolate, args);
 			// Попытка запустить в отдельном потоке приводит к падению приложения... (((
-			//std::thread thr(thInitToken, args);
+			//std::thread thr(thInitToken, isolate, args);
 			//thr.detach();
 		}
 	}
