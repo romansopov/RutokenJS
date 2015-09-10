@@ -1,9 +1,10 @@
 <html>
 <head>
-<title>Test</title>
+	<title>RutokenJS</title>
+	<script type="text/javascript" src="const.js"></script>
+	<script type="text/javascript" src="jquery-2.1.4.min.js"></script>
 </head>
 <body>
-<script type="text/javascript" src="const.js"></script>
 <script type="text/javascript">
 
 var rutoken = require('./rutoken/build/Release/rutoken');
@@ -11,75 +12,66 @@ var gui     = require('nw.gui');
 var fs      = require('fs');
 var Crypto  = require('crypto');
 
-//Crypto.setEngine('ENGINE_METHOD_ALL');
+/*
 console.log('Ciphers: ', Crypto.getCiphers());
 console.log('Hashes: ', Crypto.getHashes());
 console.log('Path: ', gui.App.dataPath);
-
-console.log('initialize() ',  CKR[rutoken.initialize()]);
+*/
+var res = rutoken.initialize();
+console.log('initialize() ',  res);
 
 var isInitialize = rutoken.isInitialize();
 console.log('isInitialize() ', isInitialize);
 
 if(isInitialize) {
 
-	rutoken.getLibInfo(function(res) {
-		console.log('getLibInfo: \n', res);
-	})
+	var res = rutoken.getLibInfo();
+	console.log('getLibInfo: \n', res);
 
-	var cntSlot = rutoken.countSlot();
-	console.log('cntSlot: ', cntSlot);
+	var res = rutoken.countSlot();
+	console.log('cntSlot: ', res);
 
-	if(cntSlot > 0) {
+	if(res.data.count > 0) {
+		cntSlot = res.data.count;
 
-		// !!! initToken
-		// Для форматирования токена используется стандартный PIN администратора или PUK для Рутокен Web == 87654321
 		/*
 		console.log('initToken: start');
-		var rv = rutoken.initToken(0, function(data) {
-			if(data.error == CKR_OK) {
-				console.log('initToken: true');
-			} else {
-				console.log('initToken: false');
-			}
-			console.log('initToken: end');
-		});
-		console.log(CKR[rv]);
+		setTimeout(function(){
+			var res = rutoken.initToken(0);
+			console.log(res);
+			console.log(CKR[res.error]);
+        }, 0);
 		*/
-		// !!! initToken
 
 		for(var i=0; i <= cntSlot-1; i++) {
-			rutoken.getSlotInfo(i, function(res) {
-				console.log('Slot info #' + i + "\n", res);
-			});
-			rutoken.getTokenInfo(i, function(res) {
-				console.log('Token info #' + i + "\n", res);
-			});
-			rutoken.getMechanismList(i, function(res) {
-				console.log('Mechanism list #' + i + "\n");
-				if(res.count > 0) {
-					res.list.forEach(function(item) {
-						item.typeText = CKM[item.type];
-						console.log(item);
-					});
-				}
-			});
+
+			var res = rutoken.getSlotInfo(i);
+			console.log('Slot info #' + i + "\n", res);
+
+			var res = rutoken.getTokenInfo(i)
+			console.log('Token info #' + i + "\n", res);
+
+			var res = rutoken.getMechanismList(i);
+			console.log('Mechanism list #' + i + "\n", res);
+
 		}
 
 		if((rv = rutoken.login(0, '12345678')) == CKR_OK) {
 			rutoken.random(64, function(res){
 				console.log('Random: ', res);
 			});
-			rutoken.getObjectList(function(res){
-				console.log('getObjectList: ', res);
-			});
+
+			var res = rutoken.getObjectList();
+			console.log('getObjectList: ', res);
+
 		} else {
 			console.log('Login error: ' + CKR[rv]);
 		}
 
 	}
 
-	//console.log('finalize() ', CKR[rutoken.finalize()]);
+	var res = rutoken.finalize();
+	console.log('finalize() ', res);
 }
 
 console.log('End');
