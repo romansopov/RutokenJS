@@ -12,26 +12,41 @@ nw-gyp build
 
 ### API RutokenJS
 
-*error* **initialize**()
+*CKR* **initialize**()
 
 *bool* **isInitialize**()
 
-*error* **finalize**()
+*CKR* **finalize**()
 
-*error|int* **countSlot**()
+*object* **countSlot**()
 
-*error|callback* **getLibInfo**(function(data))
+*object* **getLibInfo**()
 
-*error|callback* **getSlotInfo**(int slot, function(data))
+*object* **getSlotInfo**(int slot)
 
-*error|callback* **getTokenInfo**(int slot, function(data))
+*object* **getTokenInfo**(int slot)
 
-*error|callback* **getMechanismList**(int slot, function(data))
+*object* **getMechanismList**(int slot)
 
-*error|callback* **getObjectList**(function(data))
+*object* **getObjectList**()
 
-*error* **login**(int slot, string pin)
+*CKR* **login**(int slot, string pin)
 
-*error|callback* **random**(int size, function(data))
+*CKR* **loguot**()
 
-*error* **initToken**(int slot)
+*object* **random**(int size)
+
+*CKR* **initToken**(int slot)
+
+*CKR* **openSession**()
+
+*CKR* **closeSession**()
+
+*CKR* **closeAllSessions**()
+
+*object* **getSessionInfo**()
+
+*CKR* **getOperationState**()
+
+*CKR* **setOperationState**()
+
