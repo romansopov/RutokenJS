@@ -2,8 +2,6 @@
 #include <node_buffer.h>
 #include <v8.h>
 #include <Common.h>
-#include <uv.h>
-//#include <thread>
 #include <string>
 #include <config.h> // #define PKCS11ECP_LIBRARY_PATH для локального использования и добавлен в .gitignore
 
@@ -44,41 +42,48 @@ Local<Object> _V(Isolate* isolate, const CK_VERSION& version) {
 	return ret;
 }
 
-CK_RV _GetObjectLabel(CK_OBJECT_HANDLE hObject, std::string* out)
+CK_KEY_TYPE getKeyType(CK_OBJECT_HANDLE hKey)
 {
+    const CK_KEY_TYPE wrongType = -1;
+
+    CK_KEY_TYPE keyType = wrongType;
+
+    CK_ATTRIBUTE t[] = {
+        {CKA_KEY_TYPE, &keyType, sizeof(keyType)},
+    };
+
+    rv = pFunctionList->C_GetAttributeValue(hSession, hKey, t, arraysize(t));
+    if(rv == CKR_OK) {
+        return keyType;
+    }
+
+    return wrongType;
+}
+CK_RV getObjectInfo(CK_OBJECT_HANDLE hObject, std::string* id, std::string* label)
+{
+	std::string tmpId;
+	std::string tmpLabel;
+
 	CK_ATTRIBUTE attr[] = {
+		{CKA_ID,    NULL_PTR, 0},
 		{CKA_LABEL, NULL_PTR, 0}
 	};
 
-    std::string tmp;
     rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
-    if(rv == CKR_OK && attr[0].ulValueLen)
+    if(rv == CKR_OK)
 	{
-        tmp.resize(attr[0].ulValueLen);
-        attr[0].pValue = &tmp[0];
+        tmpId.resize(attr[0].ulValueLen);
+        attr[0].pValue = &tmpId[0];
+
+		tmpLabel.resize(attr[1].ulValueLen);
+        attr[1].pValue = &tmpLabel[0];
+
         rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
     }
-    out->swap(tmp);
+    id->swap(tmpId);
+	label->swap(tmpLabel);
 
     return rv;
-}
-CK_RV _GetObjectID(CK_OBJECT_HANDLE hObject, std::string* out)
-{
-	CK_ATTRIBUTE attr[] = {
-		{CKA_ID, NULL_PTR, 0}
-	};
-
-	std::string tmp;
-	rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
-	if (rv == CKR_OK && attr[0].ulValueLen)
-	{
-		tmp.resize(attr[0].ulValueLen);
-		attr[0].pValue = &tmp[0];
-		rv = pFunctionList->C_GetAttributeValue(hSession, hObject, attr, arraysize(attr));
-	}
-	out->swap(tmp);
-
-	return rv;
 }
 
 CK_RV checkInit()
@@ -532,18 +537,17 @@ void fnGetObjectList(const FunctionCallbackInfo<Value>& args)
 					i++;
 					Local<Object> tmpObj = Object::New(isolate);
 
-					std::string label;
-        			rv = _GetObjectLabel(hPublicKey, &label);
-        			if(rv == CKR_OK) {
-						tmpObj->Set(_S(isolate, "label"), _S(isolate, label));
-        			}
-
 					std::string id;
-        			rv = _GetObjectID(hPublicKey, &id);
-        			if(rv == CKR_OK) {
-						tmpObj->Set(_S(isolate, "id"), _S(isolate, id));
-        			}
+					std::string label;
+					CK_KEY_TYPE type;
 
+        			rv = getObjectInfo(hPublicKey, &id, &label);
+        			if(rv == CKR_OK) {
+						type = getKeyType(hPublicKey);
+						tmpObj->Set(_S(isolate, "id"),    _S(isolate, id));
+						tmpObj->Set(_S(isolate, "label"), _S(isolate, label));
+						tmpObj->Set(_S(isolate, "type"),  _I(isolate, type));
+        			}
 					rv = pFunctionList->C_FindObjects(hSession, &hPublicKey, 1, &count);
 
 					arr->Set(i-1, tmpObj);
@@ -558,6 +562,7 @@ void fnGetObjectList(const FunctionCallbackInfo<Value>& args)
 	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
 	args.GetReturnValue().Set(object);
 }
+
 //
 // Функция открывает сессию и авторизует пользователя на токене.
 // Return: CKR
@@ -666,80 +671,11 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 //
 // Инициализирует память Рутокен со стандартными параметрами
 // Используется функция: C_EX_InitToken
+// Return: CKR
 //
-
-struct stInitToken
-{
-    int result;
-	int slot;
-    Persistent<Object> callback;
-};
-void thInitTokenWorker(uv_work_t* req)
-{
-
-}
-void thInitTokenAfter(uv_work_t* req, int status)
-{
-	Isolate* isolate = Isolate::GetCurrent();
-
-	stInitToken* request = (stInitToken*)req->data;
-	delete req;
-
-	Handle<Value> argv[2];
-	argv[0] = Integer::New(isolate, request->result);
-
-	//request->callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-
-}
-
-void thInitToken(Isolate* isolate, const FunctionCallbackInfo<Value>& args)
-{
-	rv = CKR_SLOT_ID_INVALID;
-
-	Local<Function> callback = Local<Function>::Cast(args[1]);
-	Local<Object>   object   = Object::New(isolate);
-
-	if (aSlots != NULL)
-	{
-		int arg0 = (int)args[0]->NumberValue();
-		if (arg0 >= 0 && arg0 < (int)ulSlotCount)
-		{
-			int    slot                      = aSlots[arg0];
-			static CK_CHAR     TOKEN_LABEL[] = {"RutokenJS"};
-			static CK_UTF8CHAR USER_PIN[]    = {'1', '2', '3', '4', '5', '6', '7', '8'};
-			static CK_UTF8CHAR ADMIN_PIN[]   = {'8', '7', '6', '5', '4', '3', '2', '1'};
-
-			CK_RUTOKEN_INIT_PARAM initInfo_st;
-			initInfo_st.ulSizeofThisStructure = sizeof(CK_RUTOKEN_INIT_PARAM);
-			initInfo_st.UseRepairMode         = 0;
-			initInfo_st.pNewAdminPin          = ADMIN_PIN;
-			initInfo_st.ulNewAdminPinLen      = sizeof(ADMIN_PIN);
-			initInfo_st.pNewUserPin           = USER_PIN;
-			initInfo_st.ulNewUserPinLen       = sizeof(USER_PIN);
-			initInfo_st.ulMinAdminPinLen      = 8;
-			initInfo_st.ulMinUserPinLen       = 8;
-			initInfo_st.ChangeUserPINPolicy   = (TOKEN_FLAGS_ADMIN_CHANGE_USER_PIN | TOKEN_FLAGS_USER_CHANGE_USER_PIN);
-			initInfo_st.ulMaxAdminRetryCount  = 10;
-			initInfo_st.ulMaxUserRetryCount   = 10;
-			initInfo_st.pTokenLabel           = TOKEN_LABEL;
-			initInfo_st.ulLabelLen            = sizeof(TOKEN_LABEL);
-
-			rv = pFunctionExList->C_EX_InitToken(slot, ADMIN_PIN, arraysize(ADMIN_PIN), &initInfo_st);
-		}
-	}
-
-	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-	Local<Value> argv[1] = { object };
-	callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-	return;
-}
-
 void fnInitToken(const FunctionCallbackInfo<Value>& args)
 {
 	Isolate* isolate = Isolate::GetCurrent();
-	HandleScope scope(isolate);
-
-	Local<Object> object = Object::New(isolate);
 
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
@@ -782,12 +718,12 @@ void fnInitToken(const FunctionCallbackInfo<Value>& args)
 		}
 	}
 
-	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-	args.GetReturnValue().Set(object);
+	args.GetReturnValue().Set(_I(isolate, -(int)rv));
 }
 
 //
 // Открывает новую сессию с Рутокен
+// Return: CKR
 //
 void fnOpenSession(const FunctionCallbackInfo<Value>& args)
 {
@@ -810,6 +746,7 @@ void fnOpenSession(const FunctionCallbackInfo<Value>& args)
 
 //
 // Закрывает сессию с Рутокен
+// Return: CKR
 //
 void fnCloseSession(const FunctionCallbackInfo<Value>& args)
 {
@@ -823,19 +760,22 @@ void fnCloseSession(const FunctionCallbackInfo<Value>& args)
 
 //
 // Закрывает все сессии
+// Return: CKR
 //
 void fnCloseAllSessions(const FunctionCallbackInfo<Value>& args)
 {
 	int slotId = 0;
 	CK_RV ret = checkGetSlot(args, 1, 0, &slotId);
-	if (ret == CKR_OK)
+	if (ret == CKR_OK) {
 		ret = pFunctionList->C_CloseAllSessions(slotId);
+	}
 
 	args.GetReturnValue().Set(-(int)ret);
 }
 
 //
 // Получает информацию о конкретной сессии
+// TODO Return: {error: CKR, data: {}}
 //
 void fnGetSessionInfo(const FunctionCallbackInfo<Value>& args)
 {
@@ -864,6 +804,7 @@ void fnGetSessionInfo(const FunctionCallbackInfo<Value>& args)
 
 //
 // Получает информацию о состоянии выполнения криптографической операции
+// Return: CKR
 //
 void fnGetOperationState(const FunctionCallbackInfo<Value>& args)
 {
@@ -897,6 +838,7 @@ void fnGetOperationState(const FunctionCallbackInfo<Value>& args)
 
 //
 // Изменяет состояние выполнения криптографической операции
+// Return: CKR
 //
 void fnSetOperationState(const FunctionCallbackInfo<Value>& args)
 {
@@ -933,13 +875,15 @@ void fnSetOperationState(const FunctionCallbackInfo<Value>& args)
 
 //
 // Выполняет выход пользователя / администратора
+// Return: CKR
 //
 void fnLogout(const FunctionCallbackInfo<Value>& args)
 {
 	CK_SESSION_HANDLE handle = NULL;
 	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
-	if (ret == CKR_OK)
+	if (ret == CKR_OK) {
 		ret = pFunctionList->C_Logout(handle);
+	}
 
 	args.GetReturnValue().Set(-(int)ret);
 }
