@@ -164,12 +164,11 @@ CK_RV checkGetSessionHandle(const FunctionCallbackInfo<Value>& args, int require
 
 //
 // Инициализация библиотеки rtPKCS11ECP
-// Return: {error: CKR}
+// Return: CKR
 //
 void fnInitialize(const FunctionCallbackInfo<Value>& args)
 {
-	Isolate*      isolate = Isolate::GetCurrent();
-	Local<Object> object  = Object::New(isolate);
+	Isolate* isolate = Isolate::GetCurrent();
 
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
@@ -207,8 +206,7 @@ void fnInitialize(const FunctionCallbackInfo<Value>& args)
 
 	if(bInitialize) rv = CKR_OK;
 
-	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-	args.GetReturnValue().Set(object);
+	args.GetReturnValue().Set( _I(isolate, -(int)rv));
 }
 
 //
@@ -221,12 +219,11 @@ void isInitialize(const FunctionCallbackInfo<Value>& args) {
 
 //
 // Выгружает библиотеку из памяти
-// Return: {error: CKR}
+// Return: CKR
 //
 void fnFinalize(const FunctionCallbackInfo<Value>& args)
 {
-	Isolate*      isolate = Isolate::GetCurrent();
-	Local<Object> object  = Object::New(isolate);
+	Isolate* isolate = Isolate::GetCurrent();
 
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
@@ -237,8 +234,7 @@ void fnFinalize(const FunctionCallbackInfo<Value>& args)
 		}
 	}
 
-	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-	args.GetReturnValue().Set(object);
+	args.GetReturnValue().Set(_I(isolate, -(int)rv));
 }
 
 //
@@ -501,7 +497,7 @@ void fnGetMechanismList(const FunctionCallbackInfo<Value>& args)
 }
 
 //
-// Получает список объектов токена
+// Получает список объектов токена в ткущей сессии
 // Используются функции: C_FindObjectsInit, C_FindObjects, C_FindObjectsFinal
 // Return: {error: CKR, data: {count: int, list: [{}]}}
 //
@@ -607,25 +603,25 @@ void fnLogin(const FunctionCallbackInfo<Value>& args)
 //
 // random(size, callback(res))
 // Генерирует случайное число размером size
-// Возвращает объект или код ошибки
+// Return: {error: CKR, data: {}}
 //
 void fnRandom(const FunctionCallbackInfo<Value>& args)
 {
+	Isolate*      isolate = Isolate::GetCurrent();
+	Local<Object> object  = Object::New(isolate);
+
+	Local<Object> data = Object::New(isolate);
+	object->Set(_S(isolate, "data"), data);
+
 	rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
 	if (bInitialize && pFunctionList != NULL_PTR)
 	{
 		rv = CKR_ARGUMENTS_BAD;
 
-		if (args.Length() == 2)
+		if (args.Length() == 1)
 		{
 			rv = CKR_SESSION_HANDLE_INVALID;
-
-			Isolate* isolate = Isolate::GetCurrent();
-			HandleScope scope(isolate);
-
-			Local<Function> callback = Local<Function>::Cast(args[1]);
-			Local<Object>   object   = Object::New(isolate);
 
 			if(hSession != NULL_PTR)
 			{
@@ -648,24 +644,16 @@ void fnRandom(const FunctionCallbackInfo<Value>& args)
 						arrHex->Set(i, _S(isolate, buffer));
 					}
 
-					object->Set(_S(isolate, "error"),  _I(isolate, -(int)rv));
-					object->Set(_S(isolate, "length"), _I(isolate, size));
-					object->Set(_S(isolate, "int"),    arrInt);
-					object->Set(_S(isolate, "hex"),    arrHex);
-
-					Local<Value> argv[1] = { object };
-					callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-					return;
+					data->Set(_S(isolate, "length"), _I(isolate, size));
+					data->Set(_S(isolate, "int"),    arrInt);
+					data->Set(_S(isolate, "hex"),    arrHex);
 				}
 			}
-
-			object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
-			Local<Value> argv[1] = { object };
-			callback->Call(isolate->GetCurrentContext()->Global(), 1, argv);
-			return;
 		}
 	}
-    args.GetReturnValue().Set(-(int)rv);
+
+	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+	args.GetReturnValue().Set(object);
 }
 
 //
@@ -775,10 +763,16 @@ void fnCloseAllSessions(const FunctionCallbackInfo<Value>& args)
 
 //
 // Получает информацию о конкретной сессии
-// TODO Return: {error: CKR, data: {}}
+// Return: {error: CKR, data: {}}
 //
 void fnGetSessionInfo(const FunctionCallbackInfo<Value>& args)
 {
+	Isolate*      isolate = Isolate::GetCurrent();
+	Local<Object> object  = Object::New(isolate);
+
+	Local<Object> data = Object::New(isolate);
+	object->Set(_S(isolate, "data"), data);
+
 	CK_SESSION_HANDLE handle = NULL;
 	CK_RV ret = checkGetSessionHandle(args, 0, 0, &handle);
 	if (ret == CKR_OK)
@@ -787,19 +781,15 @@ void fnGetSessionInfo(const FunctionCallbackInfo<Value>& args)
 		ret = pFunctionList->C_GetSessionInfo(handle, &info);
 		if (ret == CKR_OK)
 		{
-			Isolate*    isolate = Isolate::GetCurrent();
-			HandleScope scope(isolate);
-			Local<Object>   object = Object::New(isolate);
-			object->Set(_S(isolate, "slotId"      ), _I(isolate, info.slotID       ));
-			object->Set(_S(isolate, "state"       ), _I(isolate, info.state        ));
-			object->Set(_S(isolate, "flags"       ), _I(isolate, info.flags        ));
-			object->Set(_S(isolate, "deviceError" ), _I(isolate, info.ulDeviceError));
-			args.GetReturnValue().Set(object);
-			return;
+			data->Set(_S(isolate, "slotId"      ), _I(isolate, info.slotID       ));
+			data->Set(_S(isolate, "state"       ), _I(isolate, info.state        ));
+			data->Set(_S(isolate, "flags"       ), _I(isolate, info.flags        ));
+			data->Set(_S(isolate, "deviceError" ), _I(isolate, info.ulDeviceError));
 		}
 	}
 
-	args.GetReturnValue().Set(-(int)ret);
+	object->Set(_S(isolate, "error"), _I(isolate, -(int)rv));
+	args.GetReturnValue().Set(object);
 }
 
 //
