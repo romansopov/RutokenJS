@@ -12,11 +12,10 @@ var gui     = require('nw.gui');
 var fs      = require('fs');
 var Crypto  = require('crypto');
 
-/*
 console.log('Ciphers: ', Crypto.getCiphers());
 console.log('Hashes: ', Crypto.getHashes());
 console.log('Path: ', gui.App.dataPath);
-*/
+
 var res = rutoken.initialize();
 console.log('initialize() ',  res);
 
@@ -50,7 +49,34 @@ if(isInitialize) {
 			console.log('Token info #' + i + "\n", res);
 
 			var res = rutoken.getMechanismList(i);
-			console.log('Mechanism list #' + i + "\n", res);
+			if(res.error == CKR_OK) {
+				if(res.data.count > 0) {
+					console.log('Mechanism list #' + i + "\n");
+					$.each(res.data.list, function(i, item){
+						//console.log(item);
+						console.log(CKM[item.type]);
+						/* Рутокен ЭЦП
+						CKM_RSA_PKCS_KEY_PAIR_GEN
+						CKM_RSA_PKCS
+						CKM_RSA_PKCS_OAEP
+						CKM_MD5
+						CKM_SHA_1
+						CKM_GOSTR3410_KEY_PAIR_GEN
+						CKM_GOSTR3410
+						CKM_GOSTR3410_DERIVE
+						CKM_GOSTR3411
+						CKM_GOSTR3410_WITH_GOSTR3411
+						CKM_GOST28147_KEY_WRAP
+						CKM_GOST28147_ECB
+						CKM_GOST28147
+						CKM_GOST28147_KEY_GEN
+						CKM_GOST28147_MAC
+						*/
+					});
+				}
+			} else {
+				console.log('Mechanism list #' + i + " Error: \n", CKR[res.error]);
+			}
 
 		}
 
